@@ -51,17 +51,20 @@ try {
     const targetDir = existsSync(correctDir) ? correctDir : myRoot;
 
     // 2. Update installed_plugins.json → point to correct version dir
+    //    Skip if not present (e.g. CI / non-Claude-Code environments)
     const ipPath = resolve(homedir(), ".claude", "plugins", "installed_plugins.json");
-    const ip = JSON.parse(readFileSync(ipPath, "utf-8"));
-    for (const [key, entries] of Object.entries(ip.plugins || {})) {
-      if (!key.toLowerCase().includes("context-mode")) continue;
-      for (const entry of entries) {
-        entry.installPath = targetDir;
-        entry.version = myVersion;
-        entry.lastUpdated = new Date().toISOString();
+    if (existsSync(ipPath)) {
+      const ip = JSON.parse(readFileSync(ipPath, "utf-8"));
+      for (const [key, entries] of Object.entries(ip.plugins || {})) {
+        if (!key.toLowerCase().includes("context-mode")) continue;
+        for (const entry of entries) {
+          entry.installPath = targetDir;
+          entry.version = myVersion;
+          entry.lastUpdated = new Date().toISOString();
+        }
       }
+      writeFileSync(ipPath, JSON.stringify(ip, null, 2) + "\n", "utf-8");
     }
-    writeFileSync(ipPath, JSON.stringify(ip, null, 2) + "\n", "utf-8");
 
     // 3. Update hook path in settings.json
     const settingsPath = resolve(homedir(), ".claude", "settings.json");
