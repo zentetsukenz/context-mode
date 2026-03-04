@@ -1,6 +1,9 @@
 {
   "name": "context-mode",
-  "version": "0.9.22",
+  "workspaces": [
+    "packages/*"
+  ],
+  "version": "0.9.23-dev",
   "type": "module",
   "description": "Claude Code MCP plugin that saves 98% of your context window. Sandboxed code execution, FTS5 knowledge base, and intent-driven search.",
   "author": "Mert Koseoğlu",
@@ -28,6 +31,10 @@
   "files": [
     "build",
     "hooks",
+    "packages/shared/dist",
+    "packages/shared/package.json",
+    "packages/session/dist",
+    "packages/session/package.json",
     "server.bundle.mjs",
     "skills",
     ".claude-plugin",
@@ -39,25 +46,17 @@
   "scripts": {
     "build": "tsc",
     "bundle": "esbuild src/server.ts --bundle --platform=node --target=node18 --format=esm --outfile=server.bundle.mjs --external:better-sqlite3 --external:turndown --external:turndown-plugin-gfm --external:@mixmark-io/domino --minify",
-    "prepublishOnly": "npm run build",
+    "prepublishOnly": "npm run build && npx tsc -b packages/session/tsconfig.json && node scripts/fix-imports.mjs",
     "dev": "npx tsx src/server.ts",
     "setup": "npx tsx src/cli.ts setup",
     "doctor": "npx tsx src/cli.ts doctor",
     "typecheck": "tsc --noEmit",
-    "test": "npx tsx tests/executor.test.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "benchmark": "npx tsx tests/benchmark.ts",
     "test:use-cases": "npx tsx tests/use-cases.ts",
     "test:compare": "npx tsx tests/context-comparison.ts",
-    "test:ecosystem": "npx tsx tests/ecosystem-benchmark.ts",
-    "test:store": "npx tsx tests/store.test.ts",
-    "test:fuzzy": "npx tsx tests/fuzzy-search.test.ts",
-    "test:hooks": "npx tsx tests/hook-integration.test.ts",
-    "test:project-dir": "npx tsx tests/project-dir.test.ts",
-    "test:stream-cap": "npx tsx tests/stream-cap.test.ts",
-    "test:search-wiring": "npx tsx tests/search-wiring.test.ts",
-    "test:search-fallback": "npx tsx tests/search-fallback-integration.test.ts",
-    "test:turndown": "npx tsx tests/turndown.test.ts",
-    "test:all": "for f in tests/*.test.ts; do npx tsx \"$f\" || exit 1; done"
+    "test:ecosystem": "npx tsx tests/ecosystem-benchmark.ts"
   },
   "dependencies": {
     "@clack/prompts": "^1.0.1",
@@ -75,6 +74,7 @@
     "@types/turndown": "^5.0.5",
     "esbuild": "^0.27.3",
     "tsx": "^4.21.0",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "vitest": "^4.0.18"
   }
 }

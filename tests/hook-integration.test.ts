@@ -5,6 +5,7 @@
  * JSON stdin (the same JSON that Claude Code sends) and asserts correct output.
  */
 
+import { describe, test, beforeAll, afterAll } from "vitest";
 import { strict as assert } from "node:assert";
 import { spawnSync } from "node:child_process";
 import { join, dirname } from "node:path";
@@ -14,32 +15,6 @@ import { tmpdir } from "node:os";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const HOOK_PATH = join(__dirname, "..", "hooks", "pretooluse.mjs");
-
-let passed = 0;
-let failed = 0;
-const results: {
-  name: string;
-  status: "PASS" | "FAIL";
-  time: number;
-  error?: string;
-}[] = [];
-
-async function test(name: string, fn: () => void | Promise<void>) {
-  const start = performance.now();
-  try {
-    await fn();
-    const time = performance.now() - start;
-    passed++;
-    results.push({ name, status: "PASS", time });
-    console.log(`  ✓ ${name} (${time.toFixed(0)} ms)`);
-  } catch (err: any) {
-    const time = performance.now() - start;
-    failed++;
-    results.push({ name, status: "FAIL", time, error: err.message });
-    console.log(`  ✗ ${name} (${time.toFixed(0)} ms)`);
-    console.log(`    Error: ${err.message}`);
-  }
-}
 
 interface HookResult {
   exitCode: number;
@@ -110,14 +85,8 @@ function assertHookSpecificOutput(result: HookResult, key: string) {
   );
 }
 
-async function main() {
-  console.log("\nContext Mode — Hook Integration Tests (pretooluse.mjs)");
-  console.log("======================================================\n");
-
-  // ===== BASH: REDIRECTED COMMANDS =====
-  console.log("--- Bash: Redirected Commands ---\n");
-
-  await test("Bash + curl: redirected to echo via updatedInput", () => {
+describe("Bash: Redirected Commands", () => {
+  test("Bash + curl: redirected to echo via updatedInput", () => {
     const result = runHook({
       tool_name: "Bash",
       tool_input: { command: "curl -s http://example.com" },
@@ -125,7 +94,7 @@ async function main() {
     assertRedirect(result, "context-mode");
   });
 
-  await test("Bash + wget: redirected to echo via updatedInput", () => {
+  test("Bash + wget: redirected to echo via updatedInput", () => {
     const result = runHook({
       tool_name: "Bash",
       tool_input: { command: "wget http://example.com/file.tar.gz" },
@@ -133,18 +102,17 @@ async function main() {
     assertRedirect(result, "context-mode");
   });
 
-  await test("Bash + node -e with inline HTTP call: redirected to echo", () => {
+  test("Bash + node -e with inline HTTP call: redirected to echo", () => {
     const result = runHook({
       tool_name: "Bash",
       tool_input: { command: `node -e "fetch('http://api.example.com/data')"` },
     });
     assertRedirect(result, "context-mode");
   });
+});
 
-  // ===== BASH: ALLOWED COMMANDS =====
-  console.log("\n--- Bash: Allowed Commands ---\n");
-
-  await test("Bash + git status: passthrough", () => {
+describe("Bash: Allowed Commands", () => {
+  test("Bash + git status: passthrough", () => {
     const result = runHook({
       tool_name: "Bash",
       tool_input: { command: "git status" },
@@ -152,18 +120,17 @@ async function main() {
     assertPassthrough(result);
   });
 
-  await test("Bash + mkdir /tmp/test: passthrough", () => {
+  test("Bash + mkdir /tmp/test: passthrough", () => {
     const result = runHook({
       tool_name: "Bash",
       tool_input: { command: "mkdir /tmp/test" },
     });
     assertPassthrough(result);
   });
+});
 
-  // ===== WEBFETCH =====
-  console.log("\n--- WebFetch ---\n");
-
-  await test("WebFetch + any URL: denied with sandbox redirect", () => {
+describe("WebFetch", () => {
+  test("WebFetch + any URL: denied with sandbox redirect", () => {
     const result = runHook({
       tool_name: "WebFetch",
       tool_input: { url: "https://docs.example.com/api" },
@@ -179,11 +146,10 @@ async function main() {
       "Expected curl warning in reason",
     );
   });
+});
 
-  // ===== TASK =====
-  console.log("\n--- Task ---\n");
-
-  await test("Task + prompt: hookSpecificOutput with updatedInput containing routing block", () => {
+describe("Task", () => {
+  test("Task + prompt: hookSpecificOutput with updatedInput containing routing block", () => {
     const result = runHook({
       tool_name: "Task",
       tool_input: { prompt: "Analyze this codebase and summarize the architecture." },
@@ -218,7 +184,7 @@ async function main() {
     );
   });
 
-  await test("Task + Bash subagent: upgraded to general-purpose for MCP access", () => {
+  test("Task + Bash subagent: upgraded to general-purpose for MCP access", () => {
     const result = runHook({
       tool_name: "Task",
       tool_input: {
@@ -250,7 +216,7 @@ async function main() {
     );
   });
 
-  await test("Task + Explore subagent: keeps original subagent_type", () => {
+  test("Task + Explore subagent: keeps original subagent_type", () => {
     const result = runHook({
       tool_name: "Task",
       tool_input: {
@@ -266,11 +232,10 @@ async function main() {
       `Expected subagent_type to remain Explore or undefined, got: ${updated.subagent_type}`,
     );
   });
+});
 
-  // ===== READ =====
-  console.log("\n--- Read ---\n");
-
-  await test("Read + file_path: hookSpecificOutput with additionalContext nudge", () => {
+describe("Read", () => {
+  test("Read + file_path: hookSpecificOutput with additionalContext nudge", () => {
     const result = runHook({
       tool_name: "Read",
       tool_input: { file_path: "/some/path/to/file.ts" },
@@ -286,11 +251,10 @@ async function main() {
       "Expected <context_guidance> XML wrapper in Read nudge",
     );
   });
+});
 
-  // ===== GREP =====
-  console.log("\n--- Grep ---\n");
-
-  await test("Grep + pattern: hookSpecificOutput with additionalContext nudge", () => {
+describe("Grep", () => {
+  test("Grep + pattern: hookSpecificOutput with additionalContext nudge", () => {
     const result = runHook({
       tool_name: "Grep",
       tool_input: { pattern: "TODO", path: "/src" },
@@ -306,11 +270,10 @@ async function main() {
       "Expected <context_guidance> XML wrapper in Grep nudge",
     );
   });
+});
 
-  // ===== PASSTHROUGH TOOLS =====
-  console.log("\n--- Passthrough Tools ---\n");
-
-  await test("Glob + pattern: passthrough", () => {
+describe("Passthrough Tools", () => {
+  test("Glob + pattern: passthrough", () => {
     const result = runHook({
       tool_name: "Glob",
       tool_input: { pattern: "**/*.ts" },
@@ -318,7 +281,7 @@ async function main() {
     assertPassthrough(result);
   });
 
-  await test("WebSearch: passthrough", () => {
+  test("WebSearch: passthrough", () => {
     const result = runHook({
       tool_name: "WebSearch",
       tool_input: { query: "typescript best practices" },
@@ -326,38 +289,48 @@ async function main() {
     assertPassthrough(result);
   });
 
-  await test("Unknown tool (Edit): passthrough", () => {
+  test("Unknown tool (Edit): passthrough", () => {
     const result = runHook({
       tool_name: "Edit",
       tool_input: { file_path: "/tmp/test.ts", old_string: "foo", new_string: "bar" },
     });
     assertPassthrough(result);
   });
+});
 
-  // ===== SECURITY POLICY ENFORCEMENT =====
-  console.log("\n--- Security Policy Enforcement ---\n");
+describe("Security Policy Enforcement", () => {
+  let ISOLATED_HOME: string;
+  let MOCK_PROJECT_DIR: string;
+  let secEnv: Record<string, string>;
 
-  // Set up isolated temp dirs for security tests
-  const ISOLATED_HOME = join(tmpdir(), `hook-sec-home-${Date.now()}`);
-  const MOCK_PROJECT_DIR = join(tmpdir(), `hook-sec-project-${Date.now()}`);
-  const mockClaudeDir = join(MOCK_PROJECT_DIR, ".claude");
-  mkdirSync(join(ISOLATED_HOME, ".claude"), { recursive: true });
-  mkdirSync(mockClaudeDir, { recursive: true });
+  beforeAll(() => {
+    // Set up isolated temp dirs for security tests
+    ISOLATED_HOME = join(tmpdir(), `hook-sec-home-${Date.now()}`);
+    MOCK_PROJECT_DIR = join(tmpdir(), `hook-sec-project-${Date.now()}`);
+    const mockClaudeDir = join(MOCK_PROJECT_DIR, ".claude");
+    mkdirSync(join(ISOLATED_HOME, ".claude"), { recursive: true });
+    mkdirSync(mockClaudeDir, { recursive: true });
 
-  // Write deny/allow patterns to project settings
-  writeFileSync(
-    join(mockClaudeDir, "settings.json"),
-    JSON.stringify({
-      permissions: {
-        deny: ["Bash(sudo *)", "Bash(rm -rf /*)", "Read(.env)", "Read(**/.env*)"],
-        allow: ["Bash(git:*)", "Bash(ls:*)"],
-      },
-    }),
-  );
+    // Write deny/allow patterns to project settings
+    writeFileSync(
+      join(mockClaudeDir, "settings.json"),
+      JSON.stringify({
+        permissions: {
+          deny: ["Bash(sudo *)", "Bash(rm -rf /*)", "Read(.env)", "Read(**/.env*)"],
+          allow: ["Bash(git:*)", "Bash(ls:*)"],
+        },
+      }),
+    );
 
-  const secEnv = { HOME: ISOLATED_HOME, CLAUDE_PROJECT_DIR: MOCK_PROJECT_DIR };
+    secEnv = { HOME: ISOLATED_HOME, CLAUDE_PROJECT_DIR: MOCK_PROJECT_DIR };
+  });
 
-  await test("Security: Bash + sudo denied by deny pattern", () => {
+  afterAll(() => {
+    try { rmSync(ISOLATED_HOME, { recursive: true, force: true }); } catch {}
+    try { rmSync(MOCK_PROJECT_DIR, { recursive: true, force: true }); } catch {}
+  });
+
+  test("Security: Bash + sudo denied by deny pattern", () => {
     const result = runHook(
       { tool_name: "Bash", tool_input: { command: "sudo apt install vim" } },
       secEnv,
@@ -368,7 +341,7 @@ async function main() {
     assert.ok(parsed.hookSpecificOutput.reason.includes("deny pattern"));
   });
 
-  await test("Security: Bash + git allowed, falls through to Stage 2", () => {
+  test("Security: Bash + git allowed, falls through to Stage 2", () => {
     const result = runHook(
       { tool_name: "Bash", tool_input: { command: "git status" } },
       secEnv,
@@ -379,7 +352,7 @@ async function main() {
     assert.equal(result.stdout, "", "Allowed command should passthrough to Stage 2");
   });
 
-  await test("Security: MCP execute + shell + sudo denied", () => {
+  test("Security: MCP execute + shell + sudo denied", () => {
     const result = runHook(
       {
         tool_name: "mcp__plugin_context-mode_context-mode__execute",
@@ -392,7 +365,7 @@ async function main() {
     assert.equal(parsed.hookSpecificOutput.permissionDecision, "deny");
   });
 
-  await test("Security: MCP execute + python (non-shell) passthrough", () => {
+  test("Security: MCP execute + python (non-shell) passthrough", () => {
     const result = runHook(
       {
         tool_name: "mcp__plugin_context-mode_context-mode__execute",
@@ -404,7 +377,7 @@ async function main() {
     assert.equal(result.stdout, "", "Non-shell language should passthrough");
   });
 
-  await test("Security: MCP execute_file + .env path denied", () => {
+  test("Security: MCP execute_file + .env path denied", () => {
     const result = runHook(
       {
         tool_name: "mcp__plugin_context-mode_context-mode__execute_file",
@@ -418,7 +391,7 @@ async function main() {
     assert.ok(parsed.hookSpecificOutput.reason.includes("Read deny pattern"));
   });
 
-  await test("Security: MCP execute_file + safe path passthrough", () => {
+  test("Security: MCP execute_file + safe path passthrough", () => {
     const result = runHook(
       {
         tool_name: "mcp__plugin_context-mode_context-mode__execute_file",
@@ -430,7 +403,7 @@ async function main() {
     assert.equal(result.stdout, "", "Safe path should passthrough");
   });
 
-  await test("Security: MCP execute_file + safe path but sudo in shell code denied", () => {
+  test("Security: MCP execute_file + safe path but sudo in shell code denied", () => {
     const result = runHook(
       {
         tool_name: "mcp__plugin_context-mode_context-mode__execute_file",
@@ -443,7 +416,7 @@ async function main() {
     assert.equal(parsed.hookSpecificOutput.permissionDecision, "deny");
   });
 
-  await test("Security: MCP batch_execute with sudo in one command denied", () => {
+  test("Security: MCP batch_execute with sudo in one command denied", () => {
     const result = runHook(
       {
         tool_name: "mcp__plugin_context-mode_context-mode__batch_execute",
@@ -461,7 +434,7 @@ async function main() {
     assert.equal(parsed.hookSpecificOutput.permissionDecision, "deny");
   });
 
-  await test("Security: MCP batch_execute with all allowed commands passthrough", () => {
+  test("Security: MCP batch_execute with all allowed commands passthrough", () => {
     const result = runHook(
       {
         tool_name: "mcp__plugin_context-mode_context-mode__batch_execute",
@@ -477,22 +450,18 @@ async function main() {
     assert.equal(result.exitCode, 0);
     assert.equal(result.stdout, "", "All allowed commands should passthrough");
   });
+});
 
-  // Clean up temp dirs
-  try { rmSync(ISOLATED_HOME, { recursive: true, force: true }); } catch {}
-  try { rmSync(MOCK_PROJECT_DIR, { recursive: true, force: true }); } catch {}
-
-  // ===== PLUGIN TOOL NAME FORMAT =====
+describe("Plugin Tool Name Format in ROUTING_BLOCK", () => {
   // When installed via Claude Code plugin marketplace, tool names follow:
   //   mcp__plugin_<plugin-id>_<server-name>__<tool-name>
   // For context-mode: mcp__plugin_context-mode_context-mode__<tool-name>
   // The short form mcp__context-mode__* only works for direct MCP registration.
-  console.log("\n--- Plugin Tool Name Format in ROUTING_BLOCK ---\n");
 
   const PLUGIN_PREFIX = "mcp__plugin_context-mode_context-mode__";
   const SHORT_PREFIX = "mcp__context-mode__";
 
-  await test("Task routing block uses plugin-format tool names", () => {
+  test("Task routing block uses plugin-format tool names", () => {
     const result = runHook({ tool_name: "Task", tool_input: { prompt: "Do something." } });
     assert.equal(result.exitCode, 0);
     const parsed = JSON.parse(result.stdout);
@@ -504,7 +473,7 @@ async function main() {
     assert.ok(!prompt.includes(SHORT_PREFIX + "batch_execute"), "Must not contain short-form batch_execute");
   });
 
-  await test("Read nudge uses plugin-format execute_file tool name", () => {
+  test("Read nudge uses plugin-format execute_file tool name", () => {
     const result = runHook({ tool_name: "Read", tool_input: { file_path: "/some/file.ts" } });
     assert.equal(result.exitCode, 0);
     const parsed = JSON.parse(result.stdout);
@@ -513,7 +482,7 @@ async function main() {
     assert.ok(!ctx.includes(SHORT_PREFIX + "execute_file"), "Read nudge must not contain short-form execute_file");
   });
 
-  await test("Grep nudge uses plugin-format execute tool name", () => {
+  test("Grep nudge uses plugin-format execute tool name", () => {
     const result = runHook({ tool_name: "Grep", tool_input: { pattern: "TODO" } });
     assert.equal(result.exitCode, 0);
     const parsed = JSON.parse(result.stdout);
@@ -522,7 +491,7 @@ async function main() {
     assert.ok(!ctx.includes(SHORT_PREFIX + "execute"), "Grep nudge must not contain short-form execute");
   });
 
-  await test("WebFetch deny reason uses plugin-format fetch_and_index tool name", () => {
+  test("WebFetch deny reason uses plugin-format fetch_and_index tool name", () => {
     const result = runHook({ tool_name: "WebFetch", tool_input: { url: "https://example.com" } });
     assert.equal(result.exitCode, 0);
     const parsed = JSON.parse(result.stdout);
@@ -531,7 +500,7 @@ async function main() {
     assert.ok(!reason.includes(SHORT_PREFIX + "fetch_and_index"), "WebFetch deny must not contain short-form");
   });
 
-  await test("Bash inline-HTTP redirect uses plugin-format execute tool name", () => {
+  test("Bash inline-HTTP redirect uses plugin-format execute tool name", () => {
     const bashCmd = "python3 -c 'import requests; requests.get(url)'";
     const result = runHook({ tool_name: "Bash", tool_input: { command: bashCmd } });
     assert.equal(result.exitCode, 0);
@@ -540,13 +509,12 @@ async function main() {
     assert.ok(cmd.includes(PLUGIN_PREFIX + "execute"), "Expected plugin-format execute in inline-HTTP redirect");
     assert.ok(!cmd.includes(SHORT_PREFIX + "execute"), "Inline-HTTP redirect must not contain short-form execute");
   });
+});
 
-  // ===== SKILL COMMANDS (ctx- prefix) =====
-  console.log("\n--- Skill Commands ---\n");
-
+describe("Skill Commands", () => {
   const SKILLS_DIR = join(__dirname, "..", "skills");
 
-  await test("ctx-doctor skill directory exists with valid SKILL.md", () => {
+  test("ctx-doctor skill directory exists with valid SKILL.md", () => {
     const skillMd = join(SKILLS_DIR, "ctx-doctor", "SKILL.md");
     assert.ok(existsSync(skillMd), "skills/ctx-doctor/SKILL.md must exist");
     const content = readFileSync(skillMd, "utf-8");
@@ -554,7 +522,7 @@ async function main() {
     assert.ok(content.includes("/context-mode:ctx-doctor"), "Trigger must reference ctx-doctor");
   });
 
-  await test("ctx-upgrade skill directory exists with valid SKILL.md", () => {
+  test("ctx-upgrade skill directory exists with valid SKILL.md", () => {
     const skillMd = join(SKILLS_DIR, "ctx-upgrade", "SKILL.md");
     assert.ok(existsSync(skillMd), "skills/ctx-upgrade/SKILL.md must exist");
     const content = readFileSync(skillMd, "utf-8");
@@ -562,7 +530,7 @@ async function main() {
     assert.ok(content.includes("/context-mode:ctx-upgrade"), "Trigger must reference ctx-upgrade");
   });
 
-  await test("ctx-stats skill directory exists with valid SKILL.md", () => {
+  test("ctx-stats skill directory exists with valid SKILL.md", () => {
     const skillMd = join(SKILLS_DIR, "ctx-stats", "SKILL.md");
     assert.ok(existsSync(skillMd), "skills/ctx-stats/SKILL.md must exist");
     const content = readFileSync(skillMd, "utf-8");
@@ -570,7 +538,7 @@ async function main() {
     assert.ok(content.includes("/context-mode:ctx-stats"), "Trigger must reference ctx-stats");
   });
 
-  await test("old skill directories (doctor, upgrade, stats) no longer exist", () => {
+  test("old skill directories (doctor, upgrade, stats) no longer exist", () => {
     for (const old of ["doctor", "upgrade", "stats"]) {
       assert.ok(
         !existsSync(join(SKILLS_DIR, old)),
@@ -578,24 +546,4 @@ async function main() {
       );
     }
   });
-
-  // ===== SUMMARY =====
-  console.log("\n" + "=".repeat(60));
-  console.log(
-    `Results: ${passed} passed, ${failed} failed (${passed + failed} total)`,
-  );
-  console.log("=".repeat(60));
-
-  if (failed > 0) {
-    console.log("\nFailed tests:");
-    for (const r of results.filter((r) => r.status === "FAIL")) {
-      console.log(`  ✗ ${r.name}: ${r.error}`);
-    }
-    process.exit(1);
-  }
-}
-
-main().catch((err) => {
-  console.error("Test runner error:", err);
-  process.exit(1);
 });

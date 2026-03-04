@@ -1,0 +1,13 @@
+{
+  "name": "@context-mode/session",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./extract": { "types": "./src/extract.ts", "default": "./dist/extract.js" },
+    "./db": { "types": "./src/db.ts", "default": "./dist/db.js" },
+    "./snapshot": { "types": "./src/snapshot.ts", "default": "./dist/snapshot.js" }
+  },
+  "dependencies": {
+    "@context-mode/shared": "*"
+  }
+}

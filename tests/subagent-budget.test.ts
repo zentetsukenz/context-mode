@@ -6,37 +6,20 @@
  * 2. Shared KB: subagent index() → main agent search() via same ContentStore
  * 3. LLM compliance: real subagent respects word budget (requires `claude` CLI)
  *
- * Run: npx tsx tests/subagent-budget.test.ts
- * Run with LLM: npx tsx tests/subagent-budget.test.ts --live
+ * Run: npx vitest tests/subagent-budget.test.ts
+ * Run with LLM: npx vitest tests/subagent-budget.test.ts -- --live
  */
 
 import { strict as assert } from "node:assert";
 import { spawnSync, execSync } from "node:child_process";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { describe, test } from "vitest";
 import { ContentStore } from "../src/store.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const HOOK_PATH = join(__dirname, "..", "hooks", "pretooluse.mjs");
 const LIVE = process.argv.includes("--live");
-
-let passed = 0;
-let failed = 0;
-
-async function test(name: string, fn: () => void | Promise<void>) {
-  const start = performance.now();
-  try {
-    await fn();
-    const time = performance.now() - start;
-    passed++;
-    console.log(`  ✓ ${name} (${time.toFixed(0)}ms)`);
-  } catch (err: any) {
-    const time = performance.now() - start;
-    failed++;
-    console.log(`  ✗ ${name} (${time.toFixed(0)}ms)`);
-    console.log(`    Error: ${err.message}`);
-  }
-}
 
 // Import shared ROUTING_BLOCK — single source of truth
 import { ROUTING_BLOCK } from "../hooks/routing-block.mjs";
@@ -81,14 +64,8 @@ function runHook(input: Record<string, unknown>): string {
   return "";
 }
 
-async function main() {
-  console.log("\nSubagent Output Budget Tests");
-  console.log("============================\n");
-
-  // ─── HOOK INJECTION ───
-  console.log("--- Hook Injection ---\n");
-
-  await test("Task hook injects context_window_protection XML block", () => {
+describe("Hook Injection", () => {
+  test("Task hook injects context_window_protection XML block", () => {
     const output = runHook({
       tool_name: "Task",
       tool_input: { prompt: "Research zod npm package", subagent_type: "general-purpose" },
@@ -105,7 +82,7 @@ async function main() {
     );
   });
 
-  await test("Task hook injects output constraints and tool hierarchy", () => {
+  test("Task hook injects output constraints and tool hierarchy", () => {
     const output = runHook({
       tool_name: "Task",
       tool_input: { prompt: "Research zod", subagent_type: "general-purpose" },
@@ -124,7 +101,7 @@ async function main() {
     );
   });
 
-  await test("Task hook injects batch_execute as primary tool", () => {
+  test("Task hook injects batch_execute as primary tool", () => {
     const output = runHook({
       tool_name: "Task",
       tool_input: { prompt: "Analyze repo", subagent_type: "Explore" },
@@ -137,7 +114,7 @@ async function main() {
     );
   });
 
-  await test("Task hook upgrades Bash subagent to general-purpose", () => {
+  test("Task hook upgrades Bash subagent to general-purpose", () => {
     const output = runHook({
       tool_name: "Task",
       tool_input: { prompt: "Run git log", subagent_type: "Bash" },
@@ -155,7 +132,7 @@ async function main() {
     );
   });
 
-  await test("Task hook preserves original prompt content", () => {
+  test("Task hook preserves original prompt content", () => {
     const original = "Research the architecture of Next.js App Router";
     const output = runHook({
       tool_name: "Task",
@@ -169,7 +146,7 @@ async function main() {
     );
   });
 
-  await test("Non-Task tools are not affected by output budget", () => {
+  test("Non-Task tools are not affected by output budget", () => {
     const output = runHook({
       tool_name: "Bash",
       tool_input: { command: "ls -la" },
@@ -180,11 +157,10 @@ async function main() {
       "Bash tool should not get output format injection",
     );
   });
+});
 
-  // ─── SHARED KNOWLEDGE BASE ───
-  console.log("\n--- Shared Knowledge Base (subagent → main) ---\n");
-
-  await test("subagent index() is visible to main agent search()", () => {
+describe("Shared Knowledge Base (subagent -> main)", () => {
+  test("subagent index() is visible to main agent search()", () => {
     // Same ContentStore instance = same as shared MCP server process
     const store = new ContentStore(":memory:");
 
@@ -221,7 +197,7 @@ async function main() {
     store.close();
   });
 
-  await test("multiple subagents index into same KB with distinct sources", () => {
+  test("multiple subagents index into same KB with distinct sources", () => {
     const store = new ContentStore(":memory:");
 
     // Subagent A indexes architecture research
@@ -259,7 +235,7 @@ async function main() {
     store.close();
   });
 
-  await test("main agent can search subagent KB after subagent is done", () => {
+  test("main agent can search subagent KB after subagent is done", () => {
     const store = new ContentStore(":memory:");
 
     // Subagent lifecycle: index → close (subagent done)
@@ -276,11 +252,10 @@ async function main() {
 
     store.close();
   });
+});
 
-  // ─── CONTEXT BUDGET MEASUREMENT ───
-  console.log("\n--- Context Budget Measurement ---\n");
-
-  await test("ideal subagent response is under 500 words / 2KB", () => {
+describe("Context Budget Measurement", () => {
+  test("ideal subagent response is under 500 words / 2KB", () => {
     // This is what a compliant subagent response should look like
     const idealResponse = [
       "## Summary",
@@ -304,11 +279,9 @@ async function main() {
 
     assert.ok(words < 500, `Ideal response should be under 500 words, got ${words}`);
     assert.ok(bytes < 2048, `Ideal response should be under 2KB, got ${bytes}`);
-
-    console.log(`    Ideal: ${words} words, ${bytes} bytes, ~${Math.round(bytes / 4)} tokens`);
   });
 
-  await test("non-compliant response exceeds budget", () => {
+  test("non-compliant response exceeds budget", () => {
     // Simulate what happens WITHOUT the output budget — full inline dump
     const bloatedResponse = Array.from(
       { length: 50 },
@@ -319,15 +292,13 @@ async function main() {
     const bytes = Buffer.byteLength(bloatedResponse);
 
     assert.ok(words > 500, "Bloated response should exceed 500 words");
-    console.log(`    Bloated: ${words} words, ${bytes} bytes, ~${Math.round(bytes / 4)} tokens`);
-    console.log(`    Savings: ${((1 - 150 / words) * 100).toFixed(0)}% if compliant`);
   });
+});
 
-  // ─── LIVE LLM TEST (optional) ───
-  if (LIVE) {
-    console.log("\n--- Live LLM Test (claude -p) ---\n");
-
-    await test("real subagent respects output budget", async () => {
+// Live LLM test — only runs when --live flag is passed
+if (LIVE) {
+  describe("Live LLM Test (claude -p)", () => {
+    test("real subagent respects output budget", async () => {
       const prompt = `Research the npm package "chalk" — what it does, latest version, weekly downloads. Keep it brief.`;
 
       // Use claude CLI in pipe mode with haiku for speed
@@ -351,9 +322,6 @@ async function main() {
       const words = response.split(/\s+/).filter((w: string) => w.length > 0).length;
       const bytes = Buffer.byteLength(response);
 
-      console.log(`    Response: ${words} words, ${bytes} bytes`);
-      console.log(`    Under 500 words: ${words <= 500 ? "✓" : "✗ (" + words + ")"}`);
-
       // Soft assertion — LLM may not always comply perfectly
       if (words > 500) {
         console.log(`    WARNING: Response exceeded 500 word budget (${words} words)`);
@@ -364,20 +332,5 @@ async function main() {
         `Response should be reasonable length, got ${words} words`,
       );
     });
-  } else {
-    console.log("\n--- Live LLM Test (skipped — use --live flag) ---\n");
-    console.log("  - Run with: npx tsx tests/subagent-budget.test.ts --live");
-  }
-
-  // ─── SUMMARY ───
-  console.log("\n" + "=".repeat(60));
-  console.log(`Results: ${passed} passed, ${failed} failed (${passed + failed} total)`);
-  console.log("=".repeat(60));
-
-  if (failed > 0) process.exit(1);
+  });
 }
-
-main().catch((err) => {
-  console.error("Test runner error:", err);
-  process.exit(1);
-});

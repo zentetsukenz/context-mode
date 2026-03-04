@@ -7,38 +7,13 @@
  * stemmed queries produce populated `highlighted` fields.
  */
 
+import { describe, test } from "vitest";
 import { strict as assert } from "node:assert";
 import { extractSnippet, positionsFromHighlight } from "../src/server.js";
 import { ContentStore } from "../src/store.js";
 
 const STX = "\x02";
 const ETX = "\x03";
-
-let passed = 0;
-let failed = 0;
-const results: {
-  name: string;
-  status: "PASS" | "FAIL";
-  time: number;
-  error?: string;
-}[] = [];
-
-async function test(name: string, fn: () => void | Promise<void>) {
-  const start = performance.now();
-  try {
-    await fn();
-    const time = performance.now() - start;
-    passed++;
-    results.push({ name, status: "PASS", time });
-    console.log(`  ✓ ${name} (${time.toFixed(0)}ms)`);
-  } catch (err: any) {
-    const time = performance.now() - start;
-    failed++;
-    results.push({ name, status: "FAIL", time, error: err.message });
-    console.log(`  ✗ ${name} (${time.toFixed(0)}ms)`);
-    console.log(`    Error: ${err.message}`);
-  }
-}
 
 /** Pad preamble to >1500 chars so prefix truncation can't reach the relevant part. */
 function buildContent(preamble: string, relevant: string): string {
@@ -62,22 +37,14 @@ function markHighlighted(content: string, terms: string[]): string {
   return result;
 }
 
-async function main() {
-  console.log("\nContext Mode — extractSnippet Tests");
-  console.log("====================================\n");
-
-  // ==============================================================================
-  // positionsFromHighlight unit tests
-  // ==============================================================================
-  console.log("--- positionsFromHighlight ---\n");
-
-  await test("finds single marker position", () => {
+describe("positionsFromHighlight", () => {
+  test("finds single marker position", () => {
     const highlighted = `some text ${STX}match${ETX} more text`;
     const positions = positionsFromHighlight(highlighted);
     assert.deepEqual(positions, [10]);
   });
 
-  await test("finds multiple marker positions", () => {
+  test("finds multiple marker positions", () => {
     // "aa \x02bb\x03 cc \x02dd\x03"
     // clean: "aa bb cc dd"  → positions 3 and 9
     const highlighted = `aa ${STX}bb${ETX} cc ${STX}dd${ETX}`;
@@ -85,30 +52,27 @@ async function main() {
     assert.deepEqual(positions, [3, 9]);
   });
 
-  await test("returns empty array when no markers", () => {
+  test("returns empty array when no markers", () => {
     const positions = positionsFromHighlight("no markers here");
     assert.deepEqual(positions, []);
   });
 
-  await test("handles adjacent markers correctly", () => {
+  test("handles adjacent markers correctly", () => {
     // Two markers right next to each other
     const highlighted = `${STX}first${ETX}${STX}second${ETX}`;
     const positions = positionsFromHighlight(highlighted);
     assert.deepEqual(positions, [0, 5]);
   });
+});
 
-  // ==============================================================================
-  // extractSnippet with highlighted parameter
-  // ==============================================================================
-  console.log("\n--- extractSnippet with highlight markers ---\n");
-
-  await test("returns full content when under maxLen", () => {
+describe("extractSnippet with highlight markers", () => {
+  test("returns full content when under maxLen", () => {
     const content = "Short content about connections.";
     const result = extractSnippet(content, "connections");
     assert.equal(result, content);
   });
 
-  await test("prefers highlight-derived positions over indexOf", () => {
+  test("prefers highlight-derived positions over indexOf", () => {
     // Place the highlighted term ("configuration") far from the start,
     // and a decoy exact-match term ("configure") near the start.
     const decoy = "configure appears here near the start of the document.";
@@ -125,7 +89,7 @@ async function main() {
     );
   });
 
-  await test("multi-term query produces windows from highlight markers", () => {
+  test("multi-term query produces windows from highlight markers", () => {
     const part1 = "Database connections are pooled for performance.";
     const gap = " ".repeat(800);
     const part2 = "The configuration file supports YAML formats.";
@@ -144,7 +108,7 @@ async function main() {
     );
   });
 
-  await test("falls back to indexOf when highlighted is absent", () => {
+  test("falls back to indexOf when highlighted is absent", () => {
     const relevant = "The server connect pool handles all requests efficiently.";
     const content = buildContent("Introduction to the system architecture.", relevant);
     const result = extractSnippet(content, "connect");
@@ -154,16 +118,16 @@ async function main() {
     );
   });
 
-  await test("returns prefix when no matches found at all", () => {
+  test("returns prefix when no matches found at all", () => {
     const content = buildContent("Nothing relevant here.", "Still nothing relevant.");
     const result = extractSnippet(content, "xylophone");
     assert.ok(
-      result.endsWith("…"),
+      result.endsWith("\u2026"),
       `Expected snippet to end with ellipsis (prefix fallback)`,
     );
   });
 
-  await test("short query terms (<=2 chars) are filtered in indexOf fallback", () => {
+  test("short query terms (<=2 chars) are filtered in indexOf fallback", () => {
     const relevant = "The API endpoint returns a JSON response with status codes.";
     const content = buildContent("Filler content about nothing in particular.", relevant);
     const result = extractSnippet(content, "an endpoint");
@@ -172,13 +136,10 @@ async function main() {
       `Expected snippet to include "endpoint", got: ${result.slice(0, 200)}`,
     );
   });
+});
 
-  // ==============================================================================
-  // Store integration: stemmed queries populate highlighted field
-  // ==============================================================================
-  console.log("\n--- Store integration: highlighted field ---\n");
-
-  await test("search returns highlighted field with STX/ETX markers", () => {
+describe("Store integration: highlighted field", () => {
+  test("search returns highlighted field with STX/ETX markers", () => {
     const store = new ContentStore(":memory:");
     try {
       store.index({
@@ -204,7 +165,7 @@ async function main() {
     }
   });
 
-  await test("highlighted markers surround stemmed matches", () => {
+  test("highlighted markers surround stemmed matches", () => {
     const store = new ContentStore(":memory:");
     try {
       store.index({
@@ -227,7 +188,7 @@ async function main() {
     }
   });
 
-  await test("searchTrigram returns highlighted field", () => {
+  test("searchTrigram returns highlighted field", () => {
     const store = new ContentStore(":memory:");
     try {
       store.index({
@@ -249,7 +210,7 @@ async function main() {
     }
   });
 
-  await test("extractSnippet with store-produced highlighted finds stemmed region", () => {
+  test("extractSnippet with store-produced highlighted finds stemmed region", () => {
     const store = new ContentStore(":memory:");
     try {
       // Content where "configuration" is past the 1500-char prefix
@@ -273,17 +234,4 @@ async function main() {
       store.close();
     }
   });
-
-  // ===== SUMMARY =====
-  console.log(`\n====================================`);
-  console.log(`Total: ${passed + failed} | Passed: ${passed} | Failed: ${failed}`);
-  if (failed > 0) {
-    console.log("\nFailed tests:");
-    for (const r of results) {
-      if (r.status === "FAIL") console.log(`  ✗ ${r.name}: ${r.error}`);
-    }
-    process.exit(1);
-  }
-}
-
-main();
+});

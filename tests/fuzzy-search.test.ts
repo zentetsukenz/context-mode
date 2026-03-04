@@ -10,36 +10,11 @@
  * All fuzzy-specific tests should FAIL until the feature is built.
  */
 
+import { describe, test, expect } from "vitest";
 import { strict as assert } from "node:assert";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ContentStore } from "../src/store.js";
-
-let passed = 0;
-let failed = 0;
-const results: {
-  name: string;
-  status: "PASS" | "FAIL";
-  time: number;
-  error?: string;
-}[] = [];
-
-async function test(name: string, fn: () => void | Promise<void>) {
-  const start = performance.now();
-  try {
-    await fn();
-    const time = performance.now() - start;
-    passed++;
-    results.push({ name, status: "PASS", time });
-    console.log(`  \u2713 ${name} (${time.toFixed(0)}ms)`);
-  } catch (err: any) {
-    const time = performance.now() - start;
-    failed++;
-    results.push({ name, status: "FAIL", time, error: err.message });
-    console.log(`  \u2717 ${name} (${time.toFixed(0)}ms)`);
-    console.log(`    Error: ${err.message}`);
-  }
-}
 
 function createStore(): ContentStore {
   const path = join(
@@ -154,14 +129,8 @@ function createSeededStore(): ContentStore {
   return store;
 }
 
-async function main() {
-  console.log("\nContext Mode — Fuzzy Search Tests (TDD Red Phase)");
-  console.log("==================================================\n");
-
-  // ===== LAYER 2: TRIGRAM SEARCH =====
-  console.log("--- searchTrigram: Substring Matching ---\n");
-
-  await test("searchTrigram: finds substring match ('authenticat' → authentication)", () => {
+describe("searchTrigram: Substring Matching", () => {
+  test("searchTrigram: finds substring match ('authenticat' → authentication)", () => {
     const store = createSeededStore();
     // "authenticat" is a partial substring of "authentication"
     // Porter stemming won't match this — trigram should
@@ -174,7 +143,7 @@ async function main() {
     store.close();
   });
 
-  await test("searchTrigram: finds partial hyphenated term ('row-level' → row-level-security)", () => {
+  test("searchTrigram: finds partial hyphenated term ('row-level' → row-level-security)", () => {
     const store = createSeededStore();
     // Partial match on hyphenated compound term
     const results = store.searchTrigram("row-level", 3);
@@ -187,7 +156,7 @@ async function main() {
     store.close();
   });
 
-  await test("searchTrigram: finds camelCase substring ('useEff' → useEffect)", () => {
+  test("searchTrigram: finds camelCase substring ('useEff' → useEffect)", () => {
     const store = createSeededStore();
     // "useEff" is a prefix of "useEffect" — trigram should match
     const results = store.searchTrigram("useEff", 3);
@@ -199,7 +168,7 @@ async function main() {
     store.close();
   });
 
-  await test("searchTrigram: respects source filter", () => {
+  test("searchTrigram: respects source filter", () => {
     const store = createSeededStore();
     // "cache" appears in both "Caching docs" and potentially elsewhere
     const allResults = store.searchTrigram("cache", 10);
@@ -216,11 +185,10 @@ async function main() {
     );
     store.close();
   });
+});
 
-  // ===== LAYER 3: FUZZY CORRECTION =====
-  console.log("\n--- fuzzyCorrect: Levenshtein Typo Correction ---\n");
-
-  await test("fuzzyCorrect: corrects single typo ('autentication' → 'authentication')", () => {
+describe("fuzzyCorrect: Levenshtein Typo Correction", () => {
+  test("fuzzyCorrect: corrects single typo ('autentication' → 'authentication')", () => {
     const store = createSeededStore();
     // Missing 'h' — edit distance 1
     const corrected = store.fuzzyCorrect("autentication");
@@ -233,7 +201,7 @@ async function main() {
     store.close();
   });
 
-  await test("fuzzyCorrect: returns null for exact match (no correction needed)", () => {
+  test("fuzzyCorrect: returns null for exact match (no correction needed)", () => {
     const store = createSeededStore();
     // Exact word exists in vocabulary — no correction needed
     const corrected = store.fuzzyCorrect("authentication");
@@ -245,7 +213,7 @@ async function main() {
     store.close();
   });
 
-  await test("fuzzyCorrect: returns null for gibberish (too distant)", () => {
+  test("fuzzyCorrect: returns null for gibberish (too distant)", () => {
     const store = createSeededStore();
     // Completely unrelated — edit distance too high for any vocabulary word
     const corrected = store.fuzzyCorrect("xyzqwertymno");
@@ -256,11 +224,10 @@ async function main() {
     );
     store.close();
   });
+});
 
-  // ===== UNIFIED FALLBACK: searchWithFallback =====
-  console.log("\n--- searchWithFallback: Three-Layer Cascade ---\n");
-
-  await test("searchWithFallback: Layer 1 hit (Porter) — exact stemmed match", () => {
+describe("searchWithFallback: Three-Layer Cascade", () => {
+  test("searchWithFallback: Layer 1 hit (Porter) — exact stemmed match", () => {
     const store = createSeededStore();
     // "caching" stems to "cach" via Porter — Layer 1 should match directly
     const results = store.searchWithFallback("caching strategy", 3);
@@ -278,7 +245,7 @@ async function main() {
     store.close();
   });
 
-  await test("searchWithFallback: Layer 2 hit (Trigram) — partial substring", () => {
+  test("searchWithFallback: Layer 2 hit (Trigram) — partial substring", () => {
     const store = createSeededStore();
     // "connectionPo" is a partial camelCase — Porter won't match, trigram will
     const results = store.searchWithFallback("connectionPo", 3);
@@ -295,7 +262,7 @@ async function main() {
     store.close();
   });
 
-  await test("searchWithFallback: Layer 3 hit (Fuzzy) — typo correction", () => {
+  test("searchWithFallback: Layer 3 hit (Fuzzy) — typo correction", () => {
     const store = createSeededStore();
     // "kuberntes" is a typo for "kubernetes" (missing 'e')
     const results = store.searchWithFallback("kuberntes", 3);
@@ -312,7 +279,7 @@ async function main() {
     store.close();
   });
 
-  await test("searchWithFallback: no match at any layer returns empty", () => {
+  test("searchWithFallback: no match at any layer returns empty", () => {
     const store = createSeededStore();
     // Completely unrelated term with no substring or fuzzy match
     const results = store.searchWithFallback("xylophoneQuartzMango", 3);
@@ -320,7 +287,7 @@ async function main() {
     store.close();
   });
 
-  await test("searchWithFallback: source filter works across all layers", () => {
+  test("searchWithFallback: source filter works across all layers", () => {
     const store = createSeededStore();
     // "JWT" exists in both Auth docs and Deployment docs (JWT_SECRET)
     // With source filter, should only return Auth docs
@@ -332,18 +299,17 @@ async function main() {
     );
     store.close();
   });
+});
 
-  // ===== EDGE CASES =====
-  console.log("\n--- Edge Cases ---\n");
-
-  await test("searchTrigram: empty query returns empty", () => {
+describe("Edge Cases", () => {
+  test("searchTrigram: empty query returns empty", () => {
     const store = createSeededStore();
     const results = store.searchTrigram("", 3);
     assert.equal(results.length, 0, "Empty query should return no results");
     store.close();
   });
 
-  await test("searchTrigram: very short query (2 chars) still works", () => {
+  test("searchTrigram: very short query (2 chars) still works", () => {
     const store = createSeededStore();
     // "JS" or "k8" — trigram needs at least 3 chars to form a trigram
     // but the API should handle gracefully (return empty or degrade)
@@ -353,7 +319,7 @@ async function main() {
     store.close();
   });
 
-  await test("fuzzyCorrect: handles multi-word query (corrects each word)", () => {
+  test("fuzzyCorrect: handles multi-word query (corrects each word)", () => {
     const store = createSeededStore();
     // "autentication middlewre" — two typos
     const corrected = store.fuzzyCorrect("autentication");
@@ -364,7 +330,7 @@ async function main() {
     store.close();
   });
 
-  await test("searchWithFallback: Layer 1 hit skips Layer 2 and 3 (performance)", () => {
+  test("searchWithFallback: Layer 1 hit skips Layer 2 and 3 (performance)", () => {
     const store = createSeededStore();
     // "Redis" is an exact term — should resolve at Layer 1 only
     const start = performance.now();
@@ -381,7 +347,7 @@ async function main() {
     store.close();
   });
 
-  await test("trigram table is populated during index()", () => {
+  test("trigram table is populated during index()", () => {
     const store = createStore();
     store.index({
       content: "# Test\n\nThe horizontalPodAutoscaler manages pod replicas.",
@@ -397,7 +363,7 @@ async function main() {
     store.close();
   });
 
-  await test("trigram table is populated during indexPlainText()", () => {
+  test("trigram table is populated during indexPlainText()", () => {
     const store = createStore();
     store.indexPlainText(
       "ERROR: connectionRefused on port 5432\nWARNING: retrying in 5s",
@@ -407,29 +373,4 @@ async function main() {
     assert.ok(results.length > 0, "Trigram should work with indexPlainText content");
     store.close();
   });
-
-  // ===== SUMMARY =====
-  console.log("\n" + "=".repeat(60));
-  console.log(
-    `Results: ${passed} passed, ${failed} failed (${passed + failed} total)`,
-  );
-  console.log("=".repeat(60));
-
-  if (failed > 0) {
-    console.log("\nFailed tests:");
-    for (const r of results.filter((r) => r.status === "FAIL")) {
-      console.log(`  \u2717 ${r.name}: ${r.error}`);
-    }
-    // In TDD red phase, failures are expected — exit 0 if ALL are fuzzy tests
-    // Exit 1 only if unexpected failures occur
-    console.log(
-      "\n(TDD Red Phase: failures expected — methods not yet implemented)",
-    );
-    process.exit(1);
-  }
-}
-
-main().catch((err) => {
-  console.error("Fuzzy search test runner error:", err);
-  process.exit(1);
 });

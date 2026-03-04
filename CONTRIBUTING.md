@@ -1,6 +1,6 @@
 # Contributing to context-mode
 
-This project is MIT-licensed and moves forward with your support. Every issue, every PR, every idea matters.
+This project is licensed under the Elastic License 2.0 (ELv2) and moves forward with your support. Every issue, every PR, every idea matters.
 
 Don't overthink it. Don't ask yourself "is my PR good enough?" or "is this issue too small?" -- just send it. A rough draft beats a perfect plan that never ships. If you found a bug, report it. If you have an idea, open an issue. If you wrote a fix, submit the PR.
 
@@ -29,34 +29,47 @@ npm install
 npm run build
 ```
 
-### 2. Point the plugin registry to your local clone
+### 2. Symlink the cache to your local clone
 
-Open `~/.claude/plugins/installed_plugins.json` and find the `context-mode@claude-context-mode` entry. Change `installPath` to your local directory:
+Claude Code's plugin system manages `~/.claude/plugins/installed_plugins.json` and **will revert manual edits on restart**. The reliable approach is to replace the cache directory with a symlink to your local clone.
 
-```json
-"context-mode@claude-context-mode": [
-  {
-    "scope": "user",
-    "installPath": "/path/to/your/clone/context-mode",
-    "version": "0.9.17"
-  }
-]
+First, find your cached version:
+
+```bash
+ls ~/.claude/plugins/cache/claude-context-mode/context-mode/
+# Example output: 0.9.22
 ```
 
-### 3. Update the hook path in settings
+Then replace it with a symlink:
 
-Open `~/.claude/settings.json` and find the PreToolUse hook entry for context-mode. It will point to the cache directory -- change it to your local clone:
+```bash
+# Back up the cache (use your actual version number)
+mv ~/.claude/plugins/cache/claude-context-mode/context-mode/0.9.22 \
+   ~/.claude/plugins/cache/claude-context-mode/context-mode/0.9.22.bak
+
+# Symlink to your local clone
+ln -s /path/to/your/clone/claude-context-mode \
+   ~/.claude/plugins/cache/claude-context-mode/context-mode/0.9.22
+```
+
+Replace `/path/to/your/clone/claude-context-mode` with your actual local path.
+
+> **Why symlink?** The plugin system overwrites `installed_plugins.json` on every session start, reverting any manual path changes. A symlink lets the plugin system keep its managed path while the actual code resolves to your local clone.
+
+### 3. Update PreToolUse hook in settings
+
+The symlink in step 2 ensures `hooks.json` (which registers PostToolUse, PreCompact, and SessionStart) resolves to your local clone via the plugin system. You only need to override PreToolUse in `~/.claude/settings.json` since its broader matcher is needed for dev mode:
 
 ```json
 {
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Bash|Read|Grep|Glob|WebFetch|WebSearch|Task",
+        "matcher": "Bash|Read|Grep|WebFetch|Task|mcp__plugin_context-mode_context-mode__execute|mcp__plugin_context-mode_context-mode__execute_file|mcp__plugin_context-mode_context-mode__batch_execute",
         "hooks": [
           {
             "type": "command",
-            "command": "node /path/to/your/clone/context-mode/hooks/pretooluse.mjs"
+            "command": "node /path/to/your/clone/claude-context-mode/hooks/pretooluse.mjs"
           }
         ]
       }
@@ -65,62 +78,60 @@ Open `~/.claude/settings.json` and find the PreToolUse hook entry for context-mo
 }
 ```
 
-Replace `/path/to/your/clone/context-mode` with your actual local path. Make sure there are no duplicate hook entries pointing to the old cache path.
+Replace `/path/to/your/clone/claude-context-mode` with your actual local path.
 
-### 4. Kill the cached MCP server
+> **Important:** Do NOT add PostToolUse, PreCompact, or SessionStart to `settings.json` — they are already registered in `hooks.json` and the symlink makes them resolve to your local clone. Adding them to both causes double invocations, split session IDs, and SQLite locking errors.
 
-The marketplace version may already be running. You need to stop it so your local version takes over.
+### 4. Bump the version for verification
+
+Change the version in your local clone to something recognizable:
 
 ```bash
-# Find running context-mode processes
-ps aux | grep context-mode | grep -v grep
-
-# Kill them
-pkill -f "context-mode.*start.mjs"
+# In package.json: "version": "0.9.22-dev"
+# In src/server.ts: const VERSION = "0.9.22-dev";
 ```
 
-Verify no cached processes remain:
+Then rebuild:
 
 ```bash
+npm run build
+```
+
+### 5. Kill cached MCP processes and restart
+
+```bash
+# Kill any running context-mode processes
+pkill -f "context-mode.*start.mjs"
+
+# Verify no processes remain
 ps aux | grep context-mode | grep -v grep
 # Should return nothing
 ```
 
-### 5. Make sure cache is not being used
+Restart Claude Code (`/exit` then `claude`).
 
-Double-check that neither file references the cache:
+### 6. Verify local dev mode
 
-```bash
-# Plugin registry -- should show YOUR local path
-grep installPath ~/.claude/plugins/installed_plugins.json | grep context-mode
-# Expected: /path/to/your/clone/context-mode
-# NOT: ~/.claude/plugins/cache/...
+Run `/context-mode:ctx-doctor` in Claude Code. You should see your dev version:
 
-# Hook config -- should show YOUR local path
-grep context-mode ~/.claude/settings.json
-# Expected: /path/to/your/clone/context-mode/hooks/pretooluse.mjs
-# NOT: ~/.claude/plugins/cache/...
+```
+npm (MCP): WARN — local v0.9.22-dev, latest v0.9.22
 ```
 
-### 6. Restart Claude Code
+The version warning is expected -- it confirms you're running from your local clone, not the cache.
+
+### Restoring marketplace version
+
+To switch back to the marketplace version:
 
 ```bash
-# Exit current session
-# Ctrl+C or type /exit
-
-# Relaunch Claude Code
-claude
+# Remove symlink and restore backup
+rm ~/.claude/plugins/cache/claude-context-mode/context-mode/0.9.22
+mv ~/.claude/plugins/cache/claude-context-mode/context-mode/0.9.22.bak \
+   ~/.claude/plugins/cache/claude-context-mode/context-mode/0.9.22
 ```
 
-Claude Code will start a new MCP server from your local `installPath`.
-
-### 7. Verify your local server is running
-
-Run `/context-mode:ctx-doctor` in Claude Code. Confirm:
-- All checks PASS
-- The version matches your local `package.json`
-
-**Tip:** Bump the version in your local `package.json` to something recognizable (e.g., `0.9.17-dev.1`). Then `/context-mode:ctx-doctor` will show that version, proving you're running from your local clone -- not the cache.
+Then revert hooks in `~/.claude/settings.json` and restart Claude Code.
 
 ## Development Workflow
 
@@ -130,11 +141,14 @@ Run `/context-mode:ctx-doctor` in Claude Code. Confirm:
 # TypeScript compilation
 npm run build
 
-# Run all tests
-npm run test:all
+# Run all tests (parallel via Vitest)
+npm test
 
 # Type checking only
 npm run typecheck
+
+# Watch mode
+npm run test:watch
 ```
 
 ### See changes in Claude Code
@@ -142,27 +156,10 @@ npm run typecheck
 After modifying source code:
 
 ```bash
-# Rebuild
 npm run build
 ```
 
 Then restart your Claude Code session. The MCP server reloads on session start.
-
-### Available test suites
-
-```bash
-npm run test:all            # Run everything
-npm run test:store          # FTS5 knowledge base tests
-npm run test:fuzzy          # Fuzzy search tests
-npm run test:hooks          # PreToolUse hook tests
-npm run test:search-wiring  # Search pipeline tests
-npm run test:search-fallback # Fallback integration tests
-npm run test:stream-cap     # Stream capacity tests
-npm run test:turndown       # HTML-to-markdown tests
-npm run test:use-cases      # End-to-end use case tests
-npm run test:compare        # Context savings comparison
-npm run benchmark           # Performance benchmarks
-```
 
 ## TDD Workflow
 
@@ -199,7 +196,7 @@ Required information:
 2. Create a feature branch from `main`
 3. Follow the local development setup above
 4. Write tests first (TDD)
-5. Run `npm run test:all` and `npm run typecheck`
+5. Run `npm test` and `npm run typecheck`
 6. Test in a live Claude Code session
 7. Compare output quality before/after
 8. Open a PR using the template
@@ -214,4 +211,5 @@ Required information:
 | See background steps | `Ctrl+O` |
 | Kill cached server | `pkill -f "context-mode.*start.mjs"` |
 | Rebuild after changes | `npm run build` |
-| Run all tests | `npm run test:all` |
+| Run all tests | `npm test` |
+| Watch mode | `npm run test:watch` |

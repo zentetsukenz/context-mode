@@ -10,37 +10,8 @@
  */
 
 import { strict as assert } from "node:assert";
+import { describe, test } from "vitest";
 import { ContentStore } from "../src/store.js";
-
-// ─────────────────────────────────────────────────────────
-// Test harness (same pattern as store.test.ts)
-// ─────────────────────────────────────────────────────────
-
-let passed = 0;
-let failed = 0;
-const results: {
-  name: string;
-  status: "PASS" | "FAIL";
-  time: number;
-  error?: string;
-}[] = [];
-
-async function test(name: string, fn: () => void | Promise<void>) {
-  const start = performance.now();
-  try {
-    await fn();
-    const time = performance.now() - start;
-    passed++;
-    results.push({ name, status: "PASS", time });
-    console.log(`  \u2713 ${name} (${time.toFixed(0)}ms)`);
-  } catch (err: any) {
-    const time = performance.now() - start;
-    failed++;
-    results.push({ name, status: "FAIL", time, error: err.message });
-    console.log(`  \u2717 ${name} (${time.toFixed(0)}ms)`);
-    console.log(`    Error: ${err.message}`);
-  }
-}
 
 // ─────────────────────────────────────────────────────────
 // Smart Truncation simulation (60% head + 40% tail)
@@ -117,14 +88,8 @@ const scenarioResults: ScenarioResult[] = [];
 // Tests
 // ─────────────────────────────────────────────────────────
 
-async function main() {
-  console.log("\nContext Mode — Intent Search vs Smart Truncation");
-  console.log("=================================================\n");
-
-  // ===== SCENARIO 1: Server Log — Error Buried in Middle =====
-  console.log("--- Scenario 1: Server Log Error (line 347 of 500) ---\n");
-
-  await test("server log: intent search finds error buried in middle", () => {
+describe("Scenario 1: Server Log Error (line 347 of 500)", () => {
+  test("server log: intent search finds error buried in middle", () => {
     const lines: string[] = [];
     for (let i = 0; i < 500; i++) {
       if (i === 346) {
@@ -156,15 +121,6 @@ async function main() {
       .toLowerCase()
       .includes("connection refused");
 
-    console.log(
-      `    Truncation found error: ${truncationFoundError ? "YES" : "NO"}`,
-    );
-    console.log(`    Intent search found error: ${intentFoundError ? "YES" : "NO"}`);
-    console.log(`    Intent result size: ${intentResult.bytes} bytes`);
-    console.log(
-      `    Truncation result size: ${Buffer.byteLength(truncated)} bytes`,
-    );
-
     scenarioResults.push({
       name: "Server Log Error",
       truncationFound: truncationFoundError ? "YES" : "NO",
@@ -179,13 +135,10 @@ async function main() {
       "Intent search should find 'connection refused' error",
     );
   });
+});
 
-  // ===== SCENARIO 2: Test Results — 3 Failures Among 200 =====
-  console.log(
-    "\n--- Scenario 2: Test Failures (3 among 200 tests) ---\n",
-  );
-
-  await test("test results: intent search finds all 3 failures", () => {
+describe("Scenario 2: Test Failures (3 among 200 tests)", () => {
+  test("test results: intent search finds all 3 failures", () => {
     const failureLines: Record<number, string> = {
       67: "  \u2717 AuthSuite::testTokenExpiry FAILED - Expected 401 but got 200",
       134: "  \u2717 PaymentSuite::testRefundFlow FAILED - Expected 'refunded' but got 'pending'",
@@ -221,15 +174,6 @@ async function main() {
     if (intentResult.found.includes("testRefundFlow")) intentFailCount++;
     if (intentResult.found.includes("testFuzzyMatch")) intentFailCount++;
 
-    console.log(
-      `    Truncation found: ${truncationFailCount}/3 failures`,
-    );
-    console.log(`    Intent search found: ${intentFailCount}/3 failures`);
-    console.log(`    Intent result size: ${intentResult.bytes} bytes`);
-    console.log(
-      `    Truncation result size: ${Buffer.byteLength(truncated)} bytes`,
-    );
-
     scenarioResults.push({
       name: "Test Failures (3)",
       truncationFound: `${truncationFailCount}/3`,
@@ -245,13 +189,10 @@ async function main() {
       `Intent search should find all 3 failures, found ${intentFailCount}`,
     );
   });
+});
 
-  // ===== SCENARIO 3: Build Output — Warnings in Middle =====
-  console.log(
-    "\n--- Scenario 3: Build Warnings (2 among 300 lines) ---\n",
-  );
-
-  await test("build output: intent search finds both deprecation warnings", () => {
+describe("Scenario 3: Build Warnings (2 among 300 lines)", () => {
+  test("build output: intent search finds both deprecation warnings", () => {
     const lines: string[] = [];
     for (let i = 0; i < 300; i++) {
       if (i === 88) {
@@ -286,17 +227,6 @@ async function main() {
     if (intentResult.found.includes("left-pad")) intentWarningCount++;
     if (intentResult.found.includes("'request'")) intentWarningCount++;
 
-    console.log(
-      `    Truncation found: ${truncationWarningCount}/2 warnings`,
-    );
-    console.log(
-      `    Intent search found: ${intentWarningCount}/2 warnings`,
-    );
-    console.log(`    Intent result size: ${intentResult.bytes} bytes`);
-    console.log(
-      `    Truncation result size: ${Buffer.byteLength(truncated)} bytes`,
-    );
-
     scenarioResults.push({
       name: "Build Warnings (2)",
       truncationFound: `${truncationWarningCount}/2`,
@@ -312,13 +242,10 @@ async function main() {
       `Intent search should find both warnings, found ${intentWarningCount}`,
     );
   });
+});
 
-  // ===== SCENARIO 4: API Response — Auth Error in Large JSON =====
-  console.log(
-    "\n--- Scenario 4: API Auth Error (line 743 of 1000) ---\n",
-  );
-
-  await test("API response: intent search finds authentication error", () => {
+describe("Scenario 4: API Auth Error (line 743 of 1000)", () => {
+  test("API response: intent search finds authentication error", () => {
     const lines: string[] = [];
     for (let i = 0; i < 1000; i++) {
       if (i === 742) {
@@ -350,17 +277,6 @@ async function main() {
       .toLowerCase()
       .includes("authentication failed");
 
-    console.log(
-      `    Truncation found auth error: ${truncationFoundAuth ? "YES" : "NO"}`,
-    );
-    console.log(
-      `    Intent search found auth error: ${intentFoundAuth ? "YES" : "NO"}`,
-    );
-    console.log(`    Intent result size: ${intentResult.bytes} bytes`);
-    console.log(
-      `    Truncation result size: ${Buffer.byteLength(truncated)} bytes`,
-    );
-
     scenarioResults.push({
       name: "API Auth Error",
       truncationFound: truncationFoundAuth ? "YES" : "NO",
@@ -375,13 +291,10 @@ async function main() {
       "Intent search should find 'authentication failed' error",
     );
   });
+});
 
-  // ===== SCENARIO 5: Score-Based Search — Semantic Gap Fix =====
-  console.log(
-    "\n--- Scenario 5: Score-based search finds sections matching later intent words ---\n",
-  );
-
-  await test("score-based search: multi-word matches rank higher than single-word matches", () => {
+describe("Scenario 5: Score-based search finds sections matching later intent words", () => {
+  test("score-based search: multi-word matches rank higher than single-word matches", () => {
     // Build a 500-line synthetic changelog/advisory output.
     // Three relevant sections are scattered across the document:
     //   Lines 100-120: prototype-related code change (hasOwnProperty, allowPrototypes)
@@ -462,12 +375,6 @@ async function main() {
       foundSecurityAdvisory,
     ].filter(Boolean).length;
 
-    console.log(`    Found "Prototype Pollution Fix" section: ${foundPrototypeFix ? "YES" : "NO"}`);
-    console.log(`    Found "Proto Key Filtering" section: ${foundProtoFiltering ? "YES" : "NO"}`);
-    console.log(`    Found "Security Advisory" section: ${foundSecurityAdvisory ? "YES" : "NO"}`);
-    console.log(`    Relevant sections found: ${relevantSectionsFound}/3`);
-    console.log(`    Intent result size: ${intentResult.bytes} bytes`);
-
     scenarioResults.push({
       name: "Score-Based Search",
       truncationFound: "N/A (score test)",
@@ -495,47 +402,4 @@ async function main() {
       "it matches 4 intent words and should rank highest via BM25.",
     );
   });
-
-  // ===== SUMMARY TABLE =====
-  console.log("\n");
-  console.log("=== INTENT SEARCH vs SMART TRUNCATION ===");
-  console.log(
-    "Scenario              | Truncation Found? | Intent Found? | Intent Size | Truncation Size",
-  );
-  console.log(
-    "----------------------|-------------------|---------------|-------------|----------------",
-  );
-
-  for (const r of scenarioResults) {
-    const name = r.name.padEnd(22);
-    const trunc = r.truncationFound.padEnd(17);
-    const intent = r.intentFound.padEnd(13);
-    const intentSize = `${r.intentBytes} bytes`.padEnd(11);
-    const truncSize = `${r.truncationBytes} bytes`;
-    console.log(
-      `${name}| ${trunc} | ${intent} | ${intentSize} | ${truncSize}`,
-    );
-  }
-
-  console.log("");
-
-  // ===== FINAL RESULTS =====
-  console.log("=".repeat(60));
-  console.log(
-    `Results: ${passed} passed, ${failed} failed (${passed + failed} total)`,
-  );
-  console.log("=".repeat(60));
-
-  if (failed > 0) {
-    console.log("\nFailed tests:");
-    for (const r of results.filter((r) => r.status === "FAIL")) {
-      console.log(`  \u2717 ${r.name}: ${r.error}`);
-    }
-    process.exit(1);
-  }
-}
-
-main().catch((err) => {
-  console.error("Intent search test runner error:", err);
-  process.exit(1);
 });

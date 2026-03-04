@@ -1,0 +1,10 @@
+{
+  "name": "@context-mode/shared",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./db-base": { "types": "./src/db-base.ts", "default": "./dist/db-base.js" },
+    "./truncate": { "types": "./src/truncate.ts", "default": "./dist/truncate.js" },
+    "./types": { "types": "./src/types.ts", "default": "./dist/types.js" }
+  }
+}

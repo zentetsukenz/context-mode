@@ -1,0 +1,8 @@
+{
+  "name": "@context-mode/core",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@context-mode/shared": "*"
+  }
+}

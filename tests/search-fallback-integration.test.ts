@@ -12,36 +12,11 @@
  *   3. Verify fallback cascade: porter → trigram → fuzzy
  */
 
+import { describe, test } from "vitest";
 import { strict as assert } from "node:assert";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ContentStore } from "../src/store.js";
-
-let passed = 0;
-let failed = 0;
-const results: {
-  name: string;
-  status: "PASS" | "FAIL";
-  time: number;
-  error?: string;
-}[] = [];
-
-async function test(name: string, fn: () => void | Promise<void>) {
-  const start = performance.now();
-  try {
-    await fn();
-    const time = performance.now() - start;
-    passed++;
-    results.push({ name, status: "PASS", time });
-    console.log(`  \u2713 ${name} (${time.toFixed(0)}ms)`);
-  } catch (err: any) {
-    const time = performance.now() - start;
-    failed++;
-    results.push({ name, status: "FAIL", time, error: err.message });
-    console.log(`  \u2717 ${name} (${time.toFixed(0)}ms)`);
-    console.log(`    Error: ${err.message}`);
-  }
-}
 
 function createStore(): ContentStore {
   const path = join(
@@ -57,14 +32,8 @@ function createStore(): ContentStore {
 //   persistent.searchWithFallback(intent, maxResults, source)
 // ─────────────────────────────────────────────────────────
 
-async function main() {
-  console.log("\nContext Mode — Search Fallback Integration Tests");
-  console.log("================================================\n");
-
-  // ===== SOURCE-SCOPED searchWithFallback via indexPlainText =====
-  console.log("--- Source-scoped searchWithFallback (intentSearch path) ---\n");
-
-  await test("intentSearch path: porter layer finds exact terms in source-scoped search", () => {
+describe("Source-scoped searchWithFallback (intentSearch path)", () => {
+  test("intentSearch path: porter layer finds exact terms in source-scoped search", () => {
     const store = createStore();
 
     // Index two different sources (simulates multiple execute calls)
@@ -93,7 +62,7 @@ async function main() {
     store.close();
   });
 
-  await test("intentSearch path: trigram layer activates for partial/camelCase terms", () => {
+  test("intentSearch path: trigram layer activates for partial/camelCase terms", () => {
     const store = createStore();
 
     store.indexPlainText(
@@ -113,7 +82,7 @@ async function main() {
     store.close();
   });
 
-  await test("intentSearch path: fuzzy layer activates for typos", () => {
+  test("intentSearch path: fuzzy layer activates for typos", () => {
     const store = createStore();
 
     store.indexPlainText(
@@ -133,7 +102,7 @@ async function main() {
     store.close();
   });
 
-  await test("intentSearch path: no match returns empty (not an error)", () => {
+  test("intentSearch path: no match returns empty (not an error)", () => {
     const store = createStore();
 
     store.indexPlainText(
@@ -146,11 +115,10 @@ async function main() {
 
     store.close();
   });
+});
 
-  // ===== MULTI-SOURCE ISOLATION =====
-  console.log("\n--- Multi-source isolation (batch_execute path) ---\n");
-
-  await test("batch_execute path: scoped search isolates results per source", () => {
+describe("Multi-source isolation (batch_execute path)", () => {
+  test("batch_execute path: scoped search isolates results per source", () => {
     const store = createStore();
 
     // Simulate batch_execute indexing multiple command outputs
@@ -183,7 +151,7 @@ async function main() {
     store.close();
   });
 
-  await test("batch_execute path: global fallback when scoped search fails", () => {
+  test("batch_execute path: global fallback when scoped search fails", () => {
     const store = createStore();
 
     // Index content into one source
@@ -202,11 +170,10 @@ async function main() {
 
     store.close();
   });
+});
 
-  // ===== getDistinctiveTerms after .iterate() change =====
-  console.log("\n--- getDistinctiveTerms consistency (fix #9) ---\n");
-
-  await test("getDistinctiveTerms returns terms for multi-chunk content", () => {
+describe("getDistinctiveTerms consistency (fix #9)", () => {
+  test("getDistinctiveTerms returns terms for multi-chunk content", () => {
     const store = createStore();
 
     // getDistinctiveTerms requires chunk_count >= 3 and terms appearing in
@@ -249,24 +216,4 @@ async function main() {
 
     store.close();
   });
-
-  // ===== SUMMARY =====
-  console.log("\n" + "=".repeat(60));
-  console.log(
-    `Results: ${passed} passed, ${failed} failed (${passed + failed} total)`,
-  );
-  console.log("=".repeat(60));
-
-  if (failed > 0) {
-    console.log("\nFailed tests:");
-    for (const r of results.filter((r) => r.status === "FAIL")) {
-      console.log(`  \u2717 ${r.name}: ${r.error}`);
-    }
-    process.exit(1);
-  }
-}
-
-main().catch((err) => {
-  console.error("Search fallback integration test runner error:", err);
-  process.exit(1);
 });

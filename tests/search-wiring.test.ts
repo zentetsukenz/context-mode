@@ -11,36 +11,11 @@
  * These tests focus on store-level behavior to prove correctness of each fix.
  */
 
+import { describe, test, expect } from "vitest";
 import { strict as assert } from "node:assert";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ContentStore } from "../src/store.js";
-
-let passed = 0;
-let failed = 0;
-const results: {
-  name: string;
-  status: "PASS" | "FAIL";
-  time: number;
-  error?: string;
-}[] = [];
-
-async function test(name: string, fn: () => void | Promise<void>) {
-  const start = performance.now();
-  try {
-    await fn();
-    const time = performance.now() - start;
-    passed++;
-    results.push({ name, status: "PASS", time });
-    console.log(`  \u2713 ${name} (${time.toFixed(0)}ms)`);
-  } catch (err: any) {
-    const time = performance.now() - start;
-    failed++;
-    results.push({ name, status: "FAIL", time, error: err.message });
-    console.log(`  \u2717 ${name} (${time.toFixed(0)}ms)`);
-    console.log(`    Error: ${err.message}`);
-  }
-}
 
 function createStore(): ContentStore {
   const path = join(
@@ -50,18 +25,8 @@ function createStore(): ContentStore {
   return new ContentStore(path);
 }
 
-async function main() {
-  console.log("\nPR #4 QA Verification Tests");
-  console.log("===========================\n");
-
-  // =====================================================================
-  // FIX 1: searchWithFallback wiring — verify the 3-layer cascade works
-  //         on the PERSISTENT store (not ephemeral), which is what
-  //         intentSearch and batch_execute now use.
-  // =====================================================================
-  console.log("--- Fix 1: searchWithFallback cascade on persistent store ---\n");
-
-  await test("searchWithFallback: porter layer returns results with matchLayer='porter'", () => {
+describe("Fix 1: searchWithFallback cascade on persistent store", () => {
+  test("searchWithFallback: porter layer returns results with matchLayer='porter'", () => {
     const store = createStore();
     store.indexPlainText(
       "The authentication middleware validates JWT tokens on every request.\nExpired tokens are rejected with 401.",
@@ -76,7 +41,7 @@ async function main() {
     store.close();
   });
 
-  await test("searchWithFallback: trigram layer activates when porter fails", () => {
+  test("searchWithFallback: trigram layer activates when porter fails", () => {
     const store = createStore();
     store.indexPlainText(
       "The responseBodyParser transforms incoming XML payloads into JSON.\nAll endpoints accept application/xml.",
@@ -91,7 +56,7 @@ async function main() {
     store.close();
   });
 
-  await test("searchWithFallback: fuzzy layer corrects misspellings", () => {
+  test("searchWithFallback: fuzzy layer corrects misspellings", () => {
     const store = createStore();
     store.indexPlainText(
       "PostgreSQL database connection established successfully.\nConnection pool size: 10.",
@@ -107,7 +72,7 @@ async function main() {
     store.close();
   });
 
-  await test("searchWithFallback: cascade stops at first successful layer", () => {
+  test("searchWithFallback: cascade stops at first successful layer", () => {
     const store = createStore();
     store.indexPlainText(
       "Redis cache hit rate: 95%\nMemcached fallback rate: 3%",
@@ -122,7 +87,7 @@ async function main() {
     store.close();
   });
 
-  await test("searchWithFallback: returns empty array when all layers fail", () => {
+  test("searchWithFallback: returns empty array when all layers fail", () => {
     const store = createStore();
     store.indexPlainText(
       "Server listening on port 8080\nHealth check endpoint ready",
@@ -135,16 +100,10 @@ async function main() {
 
     store.close();
   });
+});
 
-  // =====================================================================
-  // FIX 2: Ephemeral DB elimination — the persistent store should produce
-  //         identical results to what the old ephemeral store would have.
-  //         This validates that searching the persistent store with source
-  //         scoping gives correct results (no cross-source contamination).
-  // =====================================================================
-  console.log("\n--- Fix 2: persistent store replaces ephemeral DB correctly ---\n");
-
-  await test("persistent store with source scoping isolates results like ephemeral DB did", () => {
+describe("Fix 2: persistent store replaces ephemeral DB correctly", () => {
+  test("persistent store with source scoping isolates results like ephemeral DB did", () => {
     const store = createStore();
 
     // Simulate two consecutive intentSearch calls indexing different outputs
@@ -176,7 +135,7 @@ async function main() {
     store.close();
   });
 
-  await test("persistent store accumulates content across multiple indexPlainText calls", () => {
+  test("persistent store accumulates content across multiple indexPlainText calls", () => {
     const store = createStore();
 
     store.indexPlainText("Error log from first command", "cmd-1");
@@ -197,16 +156,10 @@ async function main() {
 
     store.close();
   });
+});
 
-  // =====================================================================
-  // FIX 3: batch_execute Tier 2 "boosted with all section titles" removal.
-  //         The old code appended ALL section titles to the query, which
-  //         matched everything indiscriminately. The fix uses
-  //         searchWithFallback instead.
-  // =====================================================================
-  console.log("\n--- Fix 3: batch_execute search precision (no indiscriminate boosting) ---\n");
-
-  await test("searchWithFallback returns only relevant results, not everything", () => {
+describe("Fix 3: batch_execute search precision (no indiscriminate boosting)", () => {
+  test("searchWithFallback returns only relevant results, not everything", () => {
     const store = createStore();
 
     // Simulate batch_execute with multiple command outputs indexed
@@ -240,7 +193,7 @@ async function main() {
     store.close();
   });
 
-  await test("searchWithFallback with source scoping is more precise than global", () => {
+  test("searchWithFallback with source scoping is more precise than global", () => {
     const store = createStore();
 
     store.index({
@@ -269,15 +222,10 @@ async function main() {
 
     store.close();
   });
+});
 
-  // =====================================================================
-  // FIX 4: Transaction-wrapped vocabulary insertion
-  //         Verify that vocabulary extraction still works correctly after
-  //         wrapping in this.#db.transaction().
-  // =====================================================================
-  console.log("\n--- Fix 4: transaction-wrapped vocabulary insertion ---\n");
-
-  await test("vocabulary is correctly stored after transaction-wrapped insertion", () => {
+describe("Fix 4: transaction-wrapped vocabulary insertion", () => {
+  test("vocabulary is correctly stored after transaction-wrapped insertion", () => {
     const store = createStore();
 
     // Index content with distinctive words
@@ -300,7 +248,7 @@ async function main() {
     store.close();
   });
 
-  await test("vocabulary handles large word sets without error", () => {
+  test("vocabulary handles large word sets without error", () => {
     const store = createStore();
 
     // Generate content with many unique words to stress the transaction
@@ -324,15 +272,10 @@ async function main() {
 
     store.close();
   });
+});
 
-  // =====================================================================
-  // FIX 5: getDistinctiveTerms .iterate() streaming
-  //         Verify that switching from .all() to .iterate() produces
-  //         identical results.
-  // =====================================================================
-  console.log("\n--- Fix 5: getDistinctiveTerms with .iterate() streaming ---\n");
-
-  await test("getDistinctiveTerms produces correct terms with iterate()", () => {
+describe("Fix 5: getDistinctiveTerms with .iterate() streaming", () => {
+  test("getDistinctiveTerms produces correct terms with iterate()", () => {
     const store = createStore();
 
     // Create content with known word frequency patterns
@@ -377,7 +320,7 @@ async function main() {
     store.close();
   });
 
-  await test("getDistinctiveTerms returns empty for sources with < 3 chunks", () => {
+  test("getDistinctiveTerms returns empty for sources with < 3 chunks", () => {
     const store = createStore();
 
     const indexed = store.index({
@@ -391,7 +334,7 @@ async function main() {
     store.close();
   });
 
-  await test("getDistinctiveTerms filters terms outside frequency band", () => {
+  test("getDistinctiveTerms filters terms outside frequency band", () => {
     const store = createStore();
 
     // 10 chunks: minAppearances=2, maxAppearances=max(3, ceil(10*0.4))=4
@@ -425,20 +368,17 @@ async function main() {
 
     store.close();
   });
+});
 
-  // =====================================================================
-  // EDGE CASES: additional hardening verification
-  // =====================================================================
-  console.log("\n--- Edge cases and hardening ---\n");
-
-  await test("searchWithFallback on empty store returns empty", () => {
+describe("Edge cases and hardening", () => {
+  test("searchWithFallback on empty store returns empty", () => {
     const store = createStore();
     const results = store.searchWithFallback("anything", 3);
     assert.equal(results.length, 0, "Empty store should return empty results");
     store.close();
   });
 
-  await test("searchWithFallback with empty query returns empty", () => {
+  test("searchWithFallback with empty query returns empty", () => {
     const store = createStore();
     store.indexPlainText("Some content here", "test-source");
 
@@ -448,7 +388,7 @@ async function main() {
     store.close();
   });
 
-  await test("searchWithFallback source scoping uses LIKE partial match", () => {
+  test("searchWithFallback source scoping uses LIKE partial match", () => {
     const store = createStore();
 
     store.indexPlainText(
@@ -463,7 +403,7 @@ async function main() {
     store.close();
   });
 
-  await test("searchWithFallback handles special characters in query gracefully", () => {
+  test("searchWithFallback handles special characters in query gracefully", () => {
     const store = createStore();
     store.indexPlainText(
       "Error in module: TypeError at line 42\nStack trace follows",
@@ -479,7 +419,7 @@ async function main() {
     store.close();
   });
 
-  await test("searchWithFallback respects limit parameter across all layers", () => {
+  test("searchWithFallback respects limit parameter across all layers", () => {
     const store = createStore();
 
     // Index enough content for multiple results
@@ -498,24 +438,4 @@ async function main() {
 
     store.close();
   });
-
-  // ===== SUMMARY =====
-  console.log("\n" + "=".repeat(60));
-  console.log(
-    `Results: ${passed} passed, ${failed} failed (${passed + failed} total)`,
-  );
-  console.log("=".repeat(60));
-
-  if (failed > 0) {
-    console.log("\nFailed tests:");
-    for (const r of results.filter((r) => r.status === "FAIL")) {
-      console.log(`  \u2717 ${r.name}: ${r.error}`);
-    }
-    process.exit(1);
-  }
-}
-
-main().catch((err) => {
-  console.error("PR #4 QA test runner error:", err);
-  process.exit(1);
 });
