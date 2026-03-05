@@ -77,7 +77,7 @@ export class OpenCodeAdapter implements HookAdapter {
     preToolUse: true,
     postToolUse: true,
     preCompact: true, // experimental
-    sessionStart: false, // broken (#14808, no hook #5409)
+    sessionStart: true,
     canModifyArgs: true,
     canModifyOutput: true, // with TUI bug caveat for bash (#13575)
     canInjectSessionContext: false,
@@ -91,7 +91,7 @@ export class OpenCodeAdapter implements HookAdapter {
       toolName: input.tool_name ?? "",
       toolInput: input.tool_input ?? {},
       sessionId: this.extractSessionId(input),
-      projectDir: undefined, // OpenCode uses ctx.directory in plugin init, not env var
+      projectDir: process.env.OPENCODE_PROJECT_DIR || process.cwd(),
       raw,
     };
   }
@@ -104,7 +104,7 @@ export class OpenCodeAdapter implements HookAdapter {
       toolOutput: input.tool_output,
       isError: input.is_error,
       sessionId: this.extractSessionId(input),
-      projectDir: undefined,
+      projectDir: process.env.OPENCODE_PROJECT_DIR || process.cwd(),
       raw,
     };
   }
@@ -113,17 +113,36 @@ export class OpenCodeAdapter implements HookAdapter {
     const input = raw as OpenCodeHookInput;
     return {
       sessionId: this.extractSessionId(input),
-      projectDir: undefined,
+      projectDir: process.env.OPENCODE_PROJECT_DIR || process.cwd(),
       raw,
     };
   }
 
-  parseSessionStartInput(_raw: unknown): SessionStartEvent {
-    // SessionStart is not supported in OpenCode (#14808, #5409).
-    // This method exists to satisfy the interface but should not be called.
-    throw new Error(
-      "OpenCode does not support SessionStart hooks (see issues #14808, #5409)",
-    );
+  parseSessionStartInput(raw: unknown): SessionStartEvent {
+    const input = raw as OpenCodeHookInput;
+    const rawSource = input.source ?? "startup";
+
+    let source: SessionStartEvent["source"];
+    switch (rawSource) {
+      case "compact":
+        source = "compact";
+        break;
+      case "resume":
+        source = "resume";
+        break;
+      case "clear":
+        source = "clear";
+        break;
+      default:
+        source = "startup";
+    }
+
+    return {
+      sessionId: this.extractSessionId(input),
+      source,
+      projectDir: process.env.OPENCODE_PROJECT_DIR || process.cwd(),
+      raw,
+    };
   }
 
   // ── Response formatting ────────────────────────────────
@@ -160,9 +179,8 @@ export class OpenCodeAdapter implements HookAdapter {
     return response.context ?? "";
   }
 
-  formatSessionStartResponse(_response: SessionStartResponse): unknown {
-    // SessionStart not supported — should never be called
-    return undefined;
+  formatSessionStartResponse(response: SessionStartResponse): unknown {
+    return response.context ?? "";
   }
 
   // ── Configuration ──────────────────────────────────────
