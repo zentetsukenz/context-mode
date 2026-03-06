@@ -25,7 +25,7 @@ import {
 } from "./runtime.js";
 import { classifyNonZeroExit } from "./exit-classify.js";
 
-const VERSION = "1.0.10";
+const VERSION = "1.0.11";
 
 // Prevent silent server death from unhandled async errors
 process.on("unhandledRejection", (err) => {
