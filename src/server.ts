@@ -1731,6 +1731,20 @@ async function main() {
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
+
+  // Write routing instructions for hookless platforms (e.g. Codex CLI)
+  try {
+    const { detectPlatform, getAdapter } = await import("./adapters/detect.js");
+    const signal = detectPlatform();
+    const adapter = await getAdapter(signal.platform);
+    if (!adapter.capabilities.sessionStart) {
+      const pluginRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+      const projectDir = process.env.CLAUDE_PROJECT_DIR ?? process.env.CODEX_HOME ?? process.cwd();
+      const written = adapter.writeRoutingInstructions(projectDir, pluginRoot);
+      if (written) console.error(`Wrote routing instructions: ${written}`);
+    }
+  } catch { /* best effort — don't block server startup */ }
+
   console.error(`Context Mode MCP server v${VERSION} running on stdio`);
   console.error(`Detected runtimes:\n${getRuntimeSummary(runtimes)}`);
   if (!hasBunRuntime()) {
