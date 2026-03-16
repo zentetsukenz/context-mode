@@ -26,8 +26,16 @@ import {
 import { classifyNonZeroExit } from "./exit-classify.js";
 import { startLifecycleGuard } from "./lifecycle.js";
 import { getWorktreeSuffix } from "./session/db.js";
-const require = createRequire(import.meta.url);
-const VERSION: string = require("../package.json").version;
+const __pkg_dir = dirname(fileURLToPath(import.meta.url));
+const VERSION: string = (() => {
+  for (const rel of ["../package.json", "./package.json"]) {
+    const p = resolve(__pkg_dir, rel);
+    if (existsSync(p)) {
+      try { return JSON.parse(readFileSync(p, "utf8")).version; } catch {}
+    }
+  }
+  return "unknown";
+})();
 
 // Prevent silent server death from unhandled async errors
 process.on("unhandledRejection", (err) => {
