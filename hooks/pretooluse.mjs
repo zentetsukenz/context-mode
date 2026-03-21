@@ -136,7 +136,7 @@ const tool = input.tool_name ?? "";
 const toolInput = input.tool_input ?? {};
 
 // ─── Route and format response ───
-const decision = routePreToolUse(tool, toolInput, process.env.CLAUDE_PROJECT_DIR);
+const decision = routePreToolUse(tool, toolInput, process.env.CLAUDE_PROJECT_DIR, "claude-code");
 const response = formatDecision("claude-code", decision);
 if (response !== null) {
   process.stdout.write(JSON.stringify(response) + "\n");

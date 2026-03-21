@@ -1994,12 +1994,17 @@ async function main() {
     if (clientInfo) {
       console.error(`MCP client: ${clientInfo.name} v${clientInfo.version} → ${signal.platform}`);
     }
-    if (!adapter.capabilities.sessionStart) {
-      const pluginRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-      const projectDir = process.env.CLAUDE_PROJECT_DIR ?? process.env.CODEX_HOME ?? process.cwd();
-      const written = adapter.writeRoutingInstructions(projectDir, pluginRoot);
-      if (written) console.error(`Wrote routing instructions: ${written}`);
-    }
+    // Routing file auto-write DISABLED for all platforms (#158, #164).
+    // Writing to project dirs dirties git trees and env var detection at
+    // MCP startup is unreliable. Routing is injected via SessionStart hooks
+    // for hook-capable platforms. Non-hook platforms rely on manual setup
+    // until `context-mode init` command is implemented.
+    // if (!adapter.capabilities.sessionStart) {
+    //   const pluginRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+    //   const projectDir = process.env.CLAUDE_PROJECT_DIR ?? process.env.CODEX_HOME ?? process.cwd();
+    //   const written = adapter.writeRoutingInstructions(projectDir, pluginRoot);
+    //   if (written) console.error(`Wrote routing instructions: ${written}`);
+    // }
   } catch { /* best effort — don't block server startup */ }
 
   console.error(`Context Mode MCP server v${VERSION} running on stdio`);

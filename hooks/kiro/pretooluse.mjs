@@ -24,7 +24,7 @@ const tool = input.tool_name ?? "";
 const toolInput = input.tool_input ?? {};
 const projectDir = input.cwd ?? process.cwd();
 
-const decision = routePreToolUse(tool, toolInput, projectDir);
+const decision = routePreToolUse(tool, toolInput, projectDir, "kiro");
 
 if (!decision) process.exit(0);
 

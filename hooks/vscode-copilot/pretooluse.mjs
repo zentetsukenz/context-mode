@@ -19,7 +19,7 @@ const input = JSON.parse(raw);
 const tool = input.tool_name ?? "";
 const toolInput = input.tool_input ?? {};
 
-const decision = routePreToolUse(tool, toolInput, process.env.VSCODE_CWD || process.env.CLAUDE_PROJECT_DIR);
+const decision = routePreToolUse(tool, toolInput, process.env.VSCODE_CWD || process.env.CLAUDE_PROJECT_DIR, "vscode-copilot");
 const response = formatDecision("vscode-copilot", decision);
 if (response !== null) {
   process.stdout.write(JSON.stringify(response) + "\n");

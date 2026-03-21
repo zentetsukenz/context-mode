@@ -4,7 +4,10 @@ import "../suppress-stderr.mjs";
  * Cursor sessionStart hook for context-mode.
  */
 
-import { ROUTING_BLOCK } from "../routing-block.mjs";
+import { createRoutingBlock } from "../routing-block.mjs";
+import { createToolNamer } from "../core/tool-naming.mjs";
+
+const ROUTING_BLOCK = createRoutingBlock(createToolNamer("cursor"));
 import {
   writeSessionEventsFile,
   buildSessionDirective,

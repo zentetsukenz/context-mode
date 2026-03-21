@@ -10,7 +10,11 @@
  * - null (passthrough)
  */
 
-import { ROUTING_BLOCK, READ_GUIDANCE, GREP_GUIDANCE, BASH_GUIDANCE } from "../routing-block.mjs";
+import {
+  ROUTING_BLOCK, READ_GUIDANCE, GREP_GUIDANCE, BASH_GUIDANCE,
+  createRoutingBlock, createReadGuidance, createGrepGuidance, createBashGuidance,
+} from "../routing-block.mjs";
+import { createToolNamer } from "./tool-naming.mjs";
 import { existsSync, mkdirSync, rmSync, openSync, closeSync, constants as fsConstants } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
@@ -129,8 +133,22 @@ const TOOL_ALIASES = {
 
 /**
  * Route a PreToolUse event. Returns normalized decision object or null for passthrough.
+ *
+ * @param {string} toolName - The tool name as reported by the platform
+ * @param {object} toolInput - The tool input/parameters
+ * @param {string} [projectDir] - Project directory for security policy lookup
+ * @param {string} [platform="claude-code"] - Platform ID for tool name formatting
  */
-export function routePreToolUse(toolName, toolInput, projectDir) {
+export function routePreToolUse(toolName, toolInput, projectDir, platform) {
+  // Build platform-specific tool namer (defaults to claude-code for backward compat)
+  const t = createToolNamer(platform || "claude-code");
+
+  // Build platform-specific guidance/routing content
+  const routingBlock = platform ? createRoutingBlock(t) : ROUTING_BLOCK;
+  const readGuidance = platform ? createReadGuidance(t) : READ_GUIDANCE;
+  const grepGuidance = platform ? createGrepGuidance(t) : GREP_GUIDANCE;
+  const bashGuidance = platform ? createBashGuidance(t) : BASH_GUIDANCE;
+
   // Normalize platform-specific tool name to canonical
   const canonical = TOOL_ALIASES[toolName] ?? toolName;
 
@@ -167,7 +185,7 @@ export function routePreToolUse(toolName, toolInput, projectDir) {
       return {
         action: "modify",
         updatedInput: {
-          command: 'echo "context-mode: curl/wget blocked. You MUST use mcp__plugin_context-mode_context-mode__ctx_fetch_and_index(url, source) to fetch URLs, or mcp__plugin_context-mode_context-mode__ctx_execute(language, code) to run HTTP calls in sandbox. Do NOT retry with curl/wget."',
+          command: `echo "context-mode: curl/wget blocked. You MUST use ${t("ctx_fetch_and_index")}(url, source) to fetch URLs, or ${t("ctx_execute")}(language, code) to run HTTP calls in sandbox. Do NOT retry with curl/wget."`,
         },
       };
     }
@@ -186,7 +204,7 @@ export function routePreToolUse(toolName, toolInput, projectDir) {
       return {
         action: "modify",
         updatedInput: {
-          command: 'echo "context-mode: Inline HTTP blocked. Use mcp__plugin_context-mode_context-mode__ctx_execute(language, code) to run HTTP calls in sandbox, or mcp__plugin_context-mode_context-mode__ctx_fetch_and_index(url, source) for web pages. Do NOT retry with Bash."',
+          command: `echo "context-mode: Inline HTTP blocked. Use ${t("ctx_execute")}(language, code) to run HTTP calls in sandbox, or ${t("ctx_fetch_and_index")}(url, source) for web pages. Do NOT retry with Bash."`,
         },
       };
     }
@@ -198,23 +216,23 @@ export function routePreToolUse(toolName, toolInput, projectDir) {
       return {
         action: "modify",
         updatedInput: {
-          command: `echo "context-mode: Build tool redirected to sandbox. Use mcp__plugin_context-mode_context-mode__ctx_execute(language: \\"shell\\", code: \\"${safeCmd}\\") to run this command. Do NOT retry with Bash."`,
+          command: `echo "context-mode: Build tool redirected to sandbox. Use ${t("ctx_execute")}(language: \\"shell\\", code: \\"${safeCmd}\\") to run this command. Do NOT retry with Bash."`,
         },
       };
     }
 
     // allow all other Bash commands, but inject routing nudge (once per session)
-    return guidanceOnce("bash", BASH_GUIDANCE);
+    return guidanceOnce("bash", bashGuidance);
   }
 
   // ─── Read: nudge toward execute_file (once per session) ───
   if (canonical === "Read") {
-    return guidanceOnce("read", READ_GUIDANCE);
+    return guidanceOnce("read", readGuidance);
   }
 
   // ─── Grep: nudge toward execute (once per session) ───
   if (canonical === "Grep") {
-    return guidanceOnce("grep", GREP_GUIDANCE);
+    return guidanceOnce("grep", grepGuidance);
   }
 
   // ─── WebFetch: deny + redirect to sandbox ───
@@ -222,7 +240,7 @@ export function routePreToolUse(toolName, toolInput, projectDir) {
     const url = toolInput.url ?? "";
     return {
       action: "deny",
-      reason: `context-mode: WebFetch blocked. Use mcp__plugin_context-mode_context-mode__ctx_fetch_and_index(url: "${url}", source: "...") to fetch this URL in sandbox. Then use mcp__plugin_context-mode_context-mode__ctx_search(queries: [...]) to query results. Do NOT use curl, wget, mcp_web_fetch, or mcp_fetch_tool.`,
+      reason: `context-mode: WebFetch blocked. Use ${t("ctx_fetch_and_index")}(url: "${url}", source: "...") to fetch this URL in sandbox. Then use ${t("ctx_search")}(queries: [...]) to query results. Do NOT use curl, wget, mcp_web_fetch, or mcp_fetch_tool.`,
     };
   }
 
@@ -235,8 +253,8 @@ export function routePreToolUse(toolName, toolInput, projectDir) {
 
     const updatedInput =
       subagentType === "Bash"
-        ? { ...toolInput, [fieldName]: prompt + ROUTING_BLOCK, subagent_type: "general-purpose" }
-        : { ...toolInput, [fieldName]: prompt + ROUTING_BLOCK };
+        ? { ...toolInput, [fieldName]: prompt + routingBlock, subagent_type: "general-purpose" }
+        : { ...toolInput, [fieldName]: prompt + routingBlock };
 
     return { action: "modify", updatedInput };
   }

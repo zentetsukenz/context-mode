@@ -10,7 +10,10 @@ import "../suppress-stderr.mjs";
  * - "clear"    → No action needed
  */
 
-import { ROUTING_BLOCK } from "../routing-block.mjs";
+import { createRoutingBlock } from "../routing-block.mjs";
+import { createToolNamer } from "../core/tool-naming.mjs";
+
+const ROUTING_BLOCK = createRoutingBlock(createToolNamer("gemini-cli"));
 import { writeSessionEventsFile, buildSessionDirective, getSessionEvents, getLatestSessionEvents } from "../session-directive.mjs";
 import {
   readStdin, getSessionId, getSessionDBPath, getSessionEventsPath, getCleanupFlagPath,

@@ -14,7 +14,10 @@ import "./suppress-stderr.mjs";
  * - "clear"    → User cleared context. No resume.
  */
 
-import { ROUTING_BLOCK } from "./routing-block.mjs";
+import { createRoutingBlock } from "./routing-block.mjs";
+import { createToolNamer } from "./core/tool-naming.mjs";
+
+const ROUTING_BLOCK = createRoutingBlock(createToolNamer("claude-code"));
 import { readStdin, getSessionId, getSessionDBPath, getSessionEventsPath, getCleanupFlagPath } from "./session-helpers.mjs";
 import { writeSessionEventsFile, buildSessionDirective, getSessionEvents, getLatestSessionEvents } from "./session-directive.mjs";
 import { createSessionLoaders } from "./session-loaders.mjs";

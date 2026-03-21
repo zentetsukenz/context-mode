@@ -134,7 +134,7 @@ export const ContextModePlugin = async (ctx: PluginContext) => {
 
       let decision;
       try {
-        decision = routing.routePreToolUse(toolName, toolInput, projectDir);
+        decision = routing.routePreToolUse(toolName, toolInput, projectDir, "opencode");
       } catch {
         return; // Routing failure → allow passthrough
       }

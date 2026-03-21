@@ -289,7 +289,7 @@ export default {
 
         let decision;
         try {
-          decision = routing.routePreToolUse(toolName, toolInput, projectDir);
+          decision = routing.routePreToolUse(toolName, toolInput, projectDir, "openclaw");
         } catch {
           return; // Routing failure → allow passthrough
         }

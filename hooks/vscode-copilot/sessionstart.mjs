@@ -11,7 +11,10 @@ import "../suppress-stderr.mjs";
  */
 
 import { createSessionLoaders } from "../session-loaders.mjs";
-import { ROUTING_BLOCK } from "../routing-block.mjs";
+import { createRoutingBlock } from "../routing-block.mjs";
+import { createToolNamer } from "../core/tool-naming.mjs";
+
+const ROUTING_BLOCK = createRoutingBlock(createToolNamer("vscode-copilot"));
 import { writeSessionEventsFile, buildSessionDirective, getSessionEvents, getLatestSessionEvents } from "../session-directive.mjs";
 import {
   readStdin, getSessionId, getSessionDBPath, getSessionEventsPath, getCleanupFlagPath,

@@ -56,71 +56,14 @@ if (!process.env.CLAUDE_PROJECT_DIR) {
   process.env.CLAUDE_PROJECT_DIR = originalCwd;
 }
 
-// Auto-write routing instructions file for NON-hook-capable platforms only.
-// Hook-capable platforms (Claude Code, Gemini CLI, VS Code Copilot, OpenCode, OpenClaw)
-// inject routing via SessionStart hook — writing to disk dirties the git tree (#158).
-// server.ts also guards this with adapter.capabilities.sessionStart.
-try {
-  // Hook-capable platforms set these env vars — skip file write for them.
-  // Uses verified env vars from src/adapters/detect.ts (not invented session IDs).
-  const hookCapableSessionVars = [
-    "CLAUDE_SESSION_ID",        // Claude Code
-    "GEMINI_PROJECT_DIR",       // Gemini CLI (GEMINI_CLI also valid)
-    "OPENCODE",                 // OpenCode (OPENCODE_PID also valid)
-    "OPENCLAW_HOME",            // OpenClaw (user-set home dir)
-    "OPENCLAW_CLI",             // OpenClaw (set at runtime by openclaw CLI)
-    // VS Code Copilot: VSCODE_PID is too broad (set for ALL VS Code extensions).
-    // Accept occasional harmless write rather than false-positive suppression.
-  ];
-  const hasHookSupport = hookCapableSessionVars.some((e) => process.env[e]);
-
-  if (!hasHookSupport) {
-    const projectDir =
-      process.env.CLAUDE_PROJECT_DIR ||
-      process.env.GEMINI_PROJECT_DIR ||
-      process.env.VSCODE_CWD ||
-      process.cwd();
-
-    const configsDir = resolve(__dirname, "configs");
-
-    // Detect platform and determine instruction file
-    const platformConfigs = [
-      { env: ["CLAUDE_PROJECT_DIR"], dir: "claude-code", file: "CLAUDE.md", target: "CLAUDE.md" },
-      { env: ["GEMINI_PROJECT_DIR"], dir: "gemini-cli", file: "GEMINI.md", target: "GEMINI.md" },
-      { env: ["VSCODE_CWD"], dir: "vscode-copilot", file: "copilot-instructions.md", target: ".github/copilot-instructions.md" },
-      { env: ["OPENCODE_PROJECT_DIR"], dir: "opencode", file: "AGENTS.md", target: "AGENTS.md" },
-      { env: ["OPENCLAW_HOME"], dir: "openclaw", file: "AGENTS.md", target: "AGENTS.md" },
-      { env: ["CODEX_HOME"], dir: "codex", file: "AGENTS.md", target: "AGENTS.md" },
-    ];
-
-    const detected = platformConfigs.find((p) => p.env.some((e) => process.env[e]));
-    if (detected) {
-      const targetPath = resolve(projectDir, detected.target);
-      const sourcePath = resolve(configsDir, detected.dir, detected.file);
-
-      // Ensure parent dir exists (for .github/copilot-instructions.md)
-      const targetDir = resolve(targetPath, "..");
-      if (!existsSync(targetDir)) {
-        const { mkdirSync } = await import("node:fs");
-        mkdirSync(targetDir, { recursive: true });
-      }
-
-      if (existsSync(sourcePath)) {
-        const content = readFileSync(sourcePath, "utf-8");
-        if (existsSync(targetPath)) {
-          const existing = readFileSync(targetPath, "utf-8");
-          if (!existing.includes("context-mode")) {
-            writeFileSync(targetPath, existing.trimEnd() + "\n\n" + content, "utf-8");
-          }
-        } else {
-          writeFileSync(targetPath, content, "utf-8");
-        }
-      }
-    }
-  }
-} catch {
-  /* best effort — don't block server startup */
-}
+// Routing instructions file auto-write DISABLED for all platforms (#158, #164).
+// Env vars like CLAUDE_SESSION_ID may not be set at MCP startup time, making
+// the hook-capability guard unreliable. Writing to project dirs dirties git trees
+// and causes double context injection on hook-capable platforms.
+// Routing is handled by:
+//   - Hook-capable platforms: SessionStart hook injects ROUTING_BLOCK
+//   - Non-hook platforms: server.ts writeRoutingInstructions() on MCP connect
+//   - Future: explicit `context-mode init` command
 
 // Self-heal: if a newer version dir exists, update registry so next session uses it
 const cacheMatch = __dirname.match(

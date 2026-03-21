@@ -19,7 +19,7 @@ const tool = input.tool_name ?? "";
 const toolInput = input.tool_input ?? {};
 const projectDir = getInputProjectDir(input, CURSOR_OPTS);
 
-const decision = routePreToolUse(tool, toolInput, projectDir);
+const decision = routePreToolUse(tool, toolInput, projectDir, "cursor");
 const response = formatDecision("cursor", decision);
 // Cursor treats empty stdout as an invalid hook response,
 // so even passthrough decisions must emit a syntactically valid no-op payload.

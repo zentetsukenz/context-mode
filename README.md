@@ -26,284 +26,315 @@ https://github.com/user-attachments/assets/07013dbf-07c0-4ef1-974a-33ea1207637b
 
 ## Install
 
-<details open>
-<summary><strong>Claude Code</strong></summary>
+Platforms are grouped by install complexity. Hook-capable platforms get automatic routing enforcement. Non-hook platforms need a one-time routing file copy.
 
-**Step 1 — Install the plugin:**
+<details open>
+<summary><strong>Claude Code</strong> — plugin marketplace, fully automatic</summary>
+
+**Prerequisites:** Claude Code v1.0.33+ (`claude --version`). If `/plugin` is not recognized, update first: `brew upgrade claude-code` or `npm update -g @anthropic-ai/claude-code`.
+
+**Install:**
 
 ```bash
 /plugin marketplace add mksglu/context-mode
 /plugin install context-mode@context-mode
 ```
 
-**Step 2 — Restart Claude Code.**
+Restart Claude Code (or run `/reload-plugins`).
 
-That's it. The plugin installs everything automatically:
-- MCP server with 6 sandbox tools (`ctx_batch_execute`, `ctx_execute`, `ctx_execute_file`, `ctx_index`, `ctx_search`, `ctx_fetch_and_index`)
-- PreToolUse hooks that intercept Bash, Read, WebFetch, Grep, and Task calls — nudging them toward sandbox execution
-- PostToolUse, PreCompact, and SessionStart hooks for session tracking and context injection
-- A `CLAUDE.md` routing instructions file auto-created in your project root
-- Slash commands for diagnostics and upgrades (Claude Code only)
+**Verify:**
 
-| Command | What it does |
+```
+/context-mode:ctx-doctor
+```
+
+All checks should show `[x]`. The doctor validates runtimes, hooks, FTS5, and plugin registration.
+
+**Routing:** Automatic. The SessionStart hook injects routing instructions at runtime — no file is written to your project. The plugin registers all hooks (PreToolUse, PostToolUse, PreCompact, SessionStart) and 6 sandbox tools (`ctx_batch_execute`, `ctx_execute`, `ctx_execute_file`, `ctx_index`, `ctx_search`, `ctx_fetch_and_index`).
+
+| Slash Command | What it does |
 |---|---|
 | `/context-mode:ctx-stats` | Context savings — per-tool breakdown, tokens consumed, savings ratio. |
 | `/context-mode:ctx-doctor` | Diagnostics — runtimes, hooks, FTS5, plugin registration, versions. |
 | `/context-mode:ctx-upgrade` | Pull latest, rebuild, migrate cache, fix hooks. |
 
-> **Note:** Slash commands are a Claude Code plugin feature. On other platforms, all three utility commands (`ctx stats`, `ctx doctor`, `ctx upgrade`) work as MCP tools — just type the command name and the model will invoke it. See [Utility Commands](#utility-commands).
+> **Note:** Slash commands are a Claude Code plugin feature. On other platforms, type `ctx stats`, `ctx doctor`, or `ctx upgrade` in the chat — the model calls the MCP tool automatically. See [Utility Commands](#utility-commands).
 
-**Alternative — MCP-only install** (no hooks or slash commands):
+<details>
+<summary>Alternative — MCP-only install (no hooks or slash commands)</summary>
 
 ```bash
 claude mcp add context-mode -- npx -y context-mode
 ```
 
-This gives you the 6 sandbox tools but without automatic routing. The model can still use them — it just won't be nudged to prefer them over raw Bash/Read/WebFetch. Good for trying it out before committing to the full plugin.
+This gives you the 6 sandbox tools without automatic routing. The model can still use them — it just won't be nudged to prefer them over raw Bash/Read/WebFetch. Good for trying it out before committing to the full plugin.
+
+</details>
 
 </details>
 
 <details>
-<summary><strong>Gemini CLI</strong></summary>
+<summary><strong>Gemini CLI</strong> — one config file, hooks included</summary>
 
-**Step 1 — Install globally:**
+**Prerequisites:** Node.js 18+, Gemini CLI installed.
 
-```bash
-npm install -g context-mode
+**Install:**
+
+1. Install context-mode globally:
+
+   ```bash
+   npm install -g context-mode
+   ```
+
+2. Add the following to `~/.gemini/settings.json`. This single file registers the MCP server and all four hooks:
+
+   ```json
+   {
+     "mcpServers": {
+       "context-mode": {
+         "command": "context-mode"
+       }
+     },
+     "hooks": {
+       "BeforeTool": [
+         {
+           "matcher": "run_shell_command|read_file|read_many_files|grep_search|search_file_content|web_fetch|activate_skill|mcp__plugin_context-mode",
+           "hooks": [{ "type": "command", "command": "context-mode hook gemini-cli beforetool" }]
+         }
+       ],
+       "AfterTool": [
+         {
+           "matcher": "",
+           "hooks": [{ "type": "command", "command": "context-mode hook gemini-cli aftertool" }]
+         }
+       ],
+       "PreCompress": [
+         {
+           "matcher": "",
+           "hooks": [{ "type": "command", "command": "context-mode hook gemini-cli precompress" }]
+         }
+       ],
+       "SessionStart": [
+         {
+           "matcher": "",
+           "hooks": [{ "type": "command", "command": "context-mode hook gemini-cli sessionstart" }]
+         }
+       ]
+     }
+   }
+   ```
+
+3. Restart Gemini CLI.
+
+**Verify:**
+
+```
+/mcp list
 ```
 
-**Step 2 — Register the MCP server.** Add to `~/.gemini/settings.json`:
+You should see `context-mode: ... - Connected`.
 
-```json
-{
-  "mcpServers": {
-    "context-mode": {
-      "command": "context-mode"
-    }
-  }
-}
-```
+**Routing:** Automatic. The SessionStart hook injects routing instructions at runtime — no `GEMINI.md` file is written to your project. All four hooks (BeforeTool, AfterTool, PreCompress, SessionStart) handle enforcement programmatically.
 
-**Step 3 — Add hooks.** Without hooks, the model can ignore routing instructions and dump raw output into your context window. Hooks intercept every tool call and enforce sandbox routing programmatically — blocking `curl`, `wget`, and other data-heavy commands before they execute. Add to the same `~/.gemini/settings.json`:
+> **Why the BeforeTool matcher?** It targets only tools that produce large output (`run_shell_command`, `read_file`, `read_many_files`, `grep_search`, `search_file_content`, `web_fetch`, `activate_skill`) plus context-mode's own tools (`mcp__plugin_context-mode`). This avoids unnecessary hook overhead on lightweight tools while intercepting every tool that could flood your context window.
 
-```json
-{
-  "hooks": {
-    "BeforeTool": [
-      {
-        "matcher": "",
-        "hooks": [{ "type": "command", "command": "context-mode hook gemini-cli beforetool" }]
-      }
-    ],
-    "AfterTool": [
-      {
-        "matcher": "",
-        "hooks": [{ "type": "command", "command": "context-mode hook gemini-cli aftertool" }]
-      }
-    ],
-    "SessionStart": [
-      {
-        "matcher": "",
-        "hooks": [{ "type": "command", "command": "context-mode hook gemini-cli sessionstart" }]
-      }
-    ]
-  }
-}
-```
-
-**Step 4 — Restart Gemini CLI.** On first session start, the sessionstart hook automatically manages `GEMINI.md` routing instructions in your project root:
-
-- **File does not exist** — the routing instructions file is written.
-- **File exists without context-mode rules** — routing instructions are appended after your existing content.
-- **File already contains context-mode rules** — skipped (idempotent, no duplicate content).
-
-This works alongside hooks as a parallel enforcement layer — hooks block dangerous commands programmatically, while `GEMINI.md` teaches the model to prefer sandbox tools from the start.
-
-> **Why hooks matter:** Without hooks, context-mode relies on `GEMINI.md` instructions alone (~60% compliance). The model sometimes follows them, but regularly runs raw `curl`, reads large files directly, or dumps unprocessed output into context — a single unrouted Playwright snapshot (56 KB) wipes out an entire session's savings. With hooks, every tool call is intercepted before execution — dangerous commands are blocked, and routing guidance is injected in real-time. This is the difference between ~60% and ~98% context savings.
-
-Full hook config including PreCompress: [`configs/gemini-cli/settings.json`](configs/gemini-cli/settings.json)
+Full config reference: [`configs/gemini-cli/settings.json`](configs/gemini-cli/settings.json)
 
 </details>
 
 <details>
-<summary><strong>VS Code Copilot</strong></summary>
+<summary><strong>VS Code Copilot</strong> — hooks with SessionStart</summary>
 
-**Step 1 — Install globally:**
+**Prerequisites:** Node.js 18+, VS Code with Copilot Chat v0.32+.
 
-```bash
-npm install -g context-mode
-```
+**Install:**
 
-**Step 2 — Register the MCP server.** Create `.vscode/mcp.json` in your project root:
+1. Install context-mode globally:
 
-```json
-{
-  "servers": {
-    "context-mode": {
-      "command": "context-mode"
-    }
-  }
-}
-```
+   ```bash
+   npm install -g context-mode
+   ```
 
-**Step 3 — Add hooks.** Without hooks, the model can bypass routing and dump raw output into your context. Hooks intercept every tool call and enforce sandbox routing programmatically. Create `.github/hooks/context-mode.json`:
+2. Create `.vscode/mcp.json` in your project root:
 
-```json
-{
-  "hooks": {
-    "PreToolUse": [
-      { "type": "command", "command": "context-mode hook vscode-copilot pretooluse" }
-    ],
-    "PostToolUse": [
-      { "type": "command", "command": "context-mode hook vscode-copilot posttooluse" }
-    ],
-    "SessionStart": [
-      { "type": "command", "command": "context-mode hook vscode-copilot sessionstart" }
-    ]
-  }
-}
-```
+   ```json
+   {
+     "servers": {
+       "context-mode": {
+         "command": "context-mode"
+       }
+     }
+   }
+   ```
 
-**Step 4 — Restart VS Code.** On first session start, the sessionstart hook automatically manages `.github/copilot-instructions.md` routing instructions in your project:
+3. Create `.github/hooks/context-mode.json`:
 
-- **File does not exist** — `.github/` is created and the routing instructions file is written.
-- **File exists without context-mode rules** — routing instructions are appended after your existing content, preserving project-level coding standards.
-- **File already contains context-mode rules** — skipped (idempotent, no duplicate content).
+   ```json
+   {
+     "hooks": {
+       "PreToolUse": [
+         { "type": "command", "command": "context-mode hook vscode-copilot pretooluse" }
+       ],
+       "PostToolUse": [
+         { "type": "command", "command": "context-mode hook vscode-copilot posttooluse" }
+       ],
+       "SessionStart": [
+         { "type": "command", "command": "context-mode hook vscode-copilot sessionstart" }
+       ]
+     }
+   }
+   ```
 
-This works alongside hooks as a parallel enforcement layer — hooks intercept tool calls programmatically, while `copilot-instructions.md` guides the model's tool selection from session start.
+4. Restart VS Code.
 
-> **Why hooks matter:** Without hooks, `copilot-instructions.md` guides the model but can't block commands. A single unrouted Playwright snapshot (56 KB) or `gh issue list` (59 KB) wipes out minutes of context savings. With hooks, these calls are intercepted and redirected to the sandbox before they execute.
+**Verify:** Open Copilot Chat and type `ctx stats`. Context-mode tools should appear and respond.
+
+**Routing:** Automatic. The SessionStart hook injects routing instructions at runtime — no `copilot-instructions.md` file is written to your project.
 
 Full hook config including PreCompact: [`configs/vscode-copilot/hooks.json`](configs/vscode-copilot/hooks.json)
 
 </details>
 
 <details>
-<summary><strong>Cursor</strong></summary>
+<summary><strong>Cursor</strong> — hooks without SessionStart</summary>
 
-**Step 1 — Install globally:**
+**Prerequisites:** Node.js 18+, Cursor with agent mode.
 
-```bash
-npm install -g context-mode
-```
+**Install:**
 
-**Step 2 — Register the MCP server.** Create `.cursor/mcp.json` in your project root or `~/.cursor/mcp.json` for a global install:
+1. Install context-mode globally:
 
-```json
-{
-  "mcpServers": {
-    "context-mode": {
-      "command": "context-mode"
-    }
-  }
-}
-```
+   ```bash
+   npm install -g context-mode
+   ```
 
-**Step 3 — Add native Cursor hooks.** Cursor v1 support uses native `.cursor/hooks.json` or `~/.cursor/hooks.json` only. Create either path with:
+2. Create `.cursor/mcp.json` in your project root (or `~/.cursor/mcp.json` for global):
 
-```json
-{
-  "version": 1,
-  "hooks": {
-    "preToolUse": [
-      {
-        "command": "context-mode hook cursor pretooluse",
-        "matcher": "Shell|Read|Grep|WebFetch|Task|MCP:ctx_execute|MCP:ctx_execute_file|MCP:ctx_batch_execute"
-      }
-    ],
-    "postToolUse": [
-      {
-        "command": "context-mode hook cursor posttooluse"
-      }
-    ]
-  }
-}
-```
+   ```json
+   {
+     "mcpServers": {
+       "context-mode": {
+         "command": "context-mode"
+       }
+     }
+   }
+   ```
 
-Note: the `preToolUse` hook matcher is optional. If you don't provide it, the hook will fire on all tools.
+3. Create `.cursor/hooks.json` (or `~/.cursor/hooks.json` for global):
 
-**Step 4 — Restart Cursor or open a new agent session.** On first MCP server startup, routing instructions are auto-written to your project (same mechanism as Codex CLI).
+   ```json
+   {
+     "version": 1,
+     "hooks": {
+       "preToolUse": [
+         {
+           "command": "context-mode hook cursor pretooluse",
+           "matcher": "Shell|Read|Grep|WebFetch|Task|MCP:ctx_execute|MCP:ctx_execute_file|MCP:ctx_batch_execute"
+         }
+       ],
+       "postToolUse": [
+         {
+           "command": "context-mode hook cursor posttooluse"
+         }
+       ]
+     }
+   }
+   ```
 
-> **Native Cursor scope:** `preToolUse` and `postToolUse` are supported. `sessionStart` is documented by Cursor but currently rejected by their validator ([forum report](https://forum.cursor.com/t/unknown-hook-type-sessionstart/149566)), so routing instructions are delivered via MCP server startup instead.
->
-> **Config precedence:** project `.cursor/hooks.json` overrides `~/.cursor/hooks.json`.
+   The `preToolUse` matcher is optional — without it, the hook fires on all tools.
 
-Full native hook config: [`configs/cursor/hooks.json`](configs/cursor/hooks.json)  
-Example MCP registration: [`configs/cursor/mcp.json`](configs/cursor/mcp.json)
+4. Copy the routing rules file. Cursor lacks a SessionStart hook, so the model needs a rules file for routing awareness:
 
-</details>
+   ```bash
+   mkdir -p .cursor/rules
+   cp node_modules/context-mode/configs/cursor/context-mode.mdc .cursor/rules/context-mode.mdc
+   ```
 
-<details>
-<summary><strong>OpenCode</strong></summary>
+5. Restart Cursor or open a new agent session.
 
-**Step 1 — Install globally:**
+**Verify:** Open Cursor Settings > MCP and confirm "context-mode" shows as connected. In agent chat, type `ctx stats`.
 
-```bash
-npm install -g context-mode
-```
+**Routing:** Hooks enforce routing programmatically via `preToolUse`/`postToolUse`. The `.cursor/rules/context-mode.mdc` file provides routing instructions at session start since Cursor's `sessionStart` hook is currently rejected by their validator ([forum report](https://forum.cursor.com/t/unknown-hook-type-sessionstart/149566)). Project `.cursor/hooks.json` overrides `~/.cursor/hooks.json`.
 
-**Step 2 — Register the MCP server and plugin.** OpenCode uses a TypeScript plugin paradigm instead of JSON hooks. Add both the MCP server and the plugin to `opencode.json` in your project root:
-
-```json
-{
-  "$schema": "https://opencode.ai/config.json",
-  "mcp": {
-    "context-mode": {
-      "type": "local",
-      "command": ["context-mode"]
-    }
-  },
-  "plugin": ["context-mode"]
-}
-```
-
-The `mcp` entry gives you the 6 sandbox tools. The `plugin` entry enables hooks — OpenCode calls the plugin's TypeScript functions directly before and after each tool execution, blocking dangerous commands (like raw `curl`) and enforcing sandbox routing.
-
-**Step 3 — Restart OpenCode.** On first plugin init, the plugin automatically manages `AGENTS.md` routing instructions in your project root:
-
-- **File does not exist** — the routing instructions file is written.
-- **File exists without context-mode rules** — routing instructions are appended after your existing content.
-- **File already contains context-mode rules** — skipped (idempotent, no duplicate content).
-
-This works alongside the plugin as a parallel enforcement layer — the plugin intercepts tool calls at runtime, while `AGENTS.md` guides the model's tool preferences from session start.
-
-> **Why the plugin matters:** Without the `plugin` entry, context-mode has no way to intercept tool calls. The model can run raw `curl`, read large files directly, or dump unprocessed output into context — ignoring `AGENTS.md` instructions. With the plugin, `tool.execute.before` fires on every tool call and blocks or redirects data-heavy commands before they execute. The `experimental.session.compacting` hook builds and injects resume snapshots when the conversation compacts, preserving session state.
->
-> Note: OpenCode's SessionStart hook is not yet available ([#14808](https://github.com/sst/opencode/issues/14808)), so startup/resume session restore is not supported — the `AGENTS.md` file is the primary way context-mode instructions reach the model at session start. Compaction recovery works fully via the plugin.
+Full configs: [`configs/cursor/hooks.json`](configs/cursor/hooks.json) | [`configs/cursor/mcp.json`](configs/cursor/mcp.json) | [`configs/cursor/context-mode.mdc`](configs/cursor/context-mode.mdc)
 
 </details>
 
 <details>
-<summary><strong>OpenClaw / Pi Agent</strong></summary>
+<summary><strong>OpenCode</strong> — TypeScript plugin with hooks</summary>
+
+**Prerequisites:** Node.js 18+, OpenCode installed.
+
+**Install:**
+
+1. Install context-mode globally:
+
+   ```bash
+   npm install -g context-mode
+   ```
+
+2. Add to `opencode.json` in your project root (or `~/.config/opencode/opencode.json` for global):
+
+   ```json
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "mcp": {
+       "context-mode": {
+         "type": "local",
+         "command": ["context-mode"]
+       }
+     },
+     "plugin": ["context-mode"]
+   }
+   ```
+
+   The `mcp` entry registers the 6 sandbox tools. The `plugin` entry enables hooks — OpenCode calls the plugin's TypeScript functions directly before and after each tool execution, blocking dangerous commands and enforcing sandbox routing.
+
+3. Restart OpenCode.
+
+**Verify:** In the OpenCode session, type `ctx stats`. Context-mode tools should appear and respond.
+
+**Routing:** Automatic. The plugin intercepts tool calls at runtime via `tool.execute.before` and `tool.execute.after`. No routing file is written to your project. The `experimental.session.compacting` hook builds resume snapshots when the conversation compacts.
+
+> **Note:** OpenCode's SessionStart hook is not yet available ([#14808](https://github.com/sst/opencode/issues/14808)), so startup/resume session restore is not supported. Compaction recovery works fully via the plugin.
+
+Full config: [`configs/opencode/opencode.json`](configs/opencode/opencode.json)
+
+</details>
+
+<details>
+<summary><strong>OpenClaw / Pi Agent</strong> — native gateway plugin</summary>
 
 **Prerequisites:** OpenClaw gateway running ([>2026.1.29](https://github.com/openclaw/openclaw/pull/9761)), Node.js 22+.
 
 context-mode runs as a native [OpenClaw](https://github.com/openclaw) gateway plugin, targeting **Pi Agent** sessions (Read/Write/Edit/Bash tools). Unlike other platforms, there's no separate MCP server — the plugin registers directly into the gateway runtime via OpenClaw's [plugin API](https://docs.openclaw.ai/tools/plugin).
 
-**Step 1 — Clone and install:**
+**Install:**
 
-```bash
-git clone https://github.com/mksglu/context-mode.git
-cd context-mode
-npm run install:openclaw
-```
+1. Clone and install:
 
-The installer uses `$OPENCLAW_STATE_DIR` from your environment (default: `/openclaw`). To specify a custom path:
+   ```bash
+   git clone https://github.com/mksglu/context-mode.git
+   cd context-mode
+   npm run install:openclaw
+   ```
 
-```bash
-npm run install:openclaw -- /path/to/openclaw-state
-```
+   The installer uses `$OPENCLAW_STATE_DIR` from your environment (default: `/openclaw`). To specify a custom path:
 
-Common locations:
-- **Docker:** `/openclaw` (the default)
-- **Local:** `~/.openclaw` or wherever you set `OPENCLAW_STATE_DIR`
+   ```bash
+   npm run install:openclaw -- /path/to/openclaw-state
+   ```
 
-The installer handles everything: `npm install`, `npm run build`, `better-sqlite3` native rebuild, extension registration in `runtime.json`, and gateway restart via SIGUSR1.
+   Common locations: **Docker** — `/openclaw` (the default). **Local** — `~/.openclaw` or wherever you set `OPENCLAW_STATE_DIR`.
 
-**Step 2 — Verify.** Open a Pi Agent session. The plugin auto-injects `AGENTS.md` routing instructions and registers 8 hooks via [`api.on()`](https://docs.openclaw.ai/tools/plugin) (lifecycle) and [`api.registerHook()`](https://docs.openclaw.ai/tools/plugin) (commands). All tool interception, session tracking, and compaction recovery hooks activate automatically — no manual hook configuration needed.
+   The installer handles everything: `npm install`, `npm run build`, `better-sqlite3` native rebuild, extension registration in `runtime.json`, and gateway restart via SIGUSR1.
 
-> **Why native plugin?** OpenClaw doesn't support shell-based hooks like Claude Code or Gemini CLI. Instead, plugins register TypeScript functions directly into the gateway runtime. This gives full access to tool interception, argument mutation, and session context injection — equivalent to the hook-based approach on other platforms.
->
+2. Open a Pi Agent session.
+
+**Verify:** The plugin registers 8 hooks via [`api.on()`](https://docs.openclaw.ai/tools/plugin) (lifecycle) and [`api.registerHook()`](https://docs.openclaw.ai/tools/plugin) (commands). Type `ctx stats` to confirm tools are loaded.
+
+**Routing:** Automatic. All tool interception, session tracking, and compaction recovery hooks activate automatically — no manual hook configuration or routing file needed.
+
 > **Minimum version:** OpenClaw >2026.1.29 — this includes the `api.on()` lifecycle fix from [PR #9761](https://github.com/openclaw/openclaw/pull/9761). On older versions, lifecycle hooks silently fail. The adapter falls back to DB snapshot reconstruction (less precise but preserves critical state).
 
 Full documentation: [`docs/adapters/openclaw.md`](docs/adapters/openclaw.md)
@@ -311,173 +342,216 @@ Full documentation: [`docs/adapters/openclaw.md`](docs/adapters/openclaw.md)
 </details>
 
 <details>
-<summary><strong>Codex CLI</strong></summary>
+<summary><strong>Codex CLI</strong> — MCP-only, no hooks</summary>
 
-**Step 1 — Install globally:**
+**Prerequisites:** Node.js 18+, Codex CLI installed.
 
-```bash
-npm install -g context-mode
-```
+**Install:**
 
-**Step 2 — Register the MCP server.** Add to `~/.codex/config.toml`:
+1. Install context-mode globally:
 
-```toml
-[mcp_servers.context-mode]
-command = "context-mode"
-```
+   ```bash
+   npm install -g context-mode
+   ```
 
-**Step 3 — Restart Codex CLI.** On first run, an `AGENTS.md` routing instructions file is auto-created in your project root. Codex CLI reads `AGENTS.md` automatically and learns to prefer context-mode sandbox tools.
+2. Add to `~/.codex/config.toml`:
 
-**About hooks:** Codex CLI does not support hooks — PRs [#2904](https://github.com/openai/codex/pull/2904) and [#9796](https://github.com/openai/codex/pull/9796) were closed without merge. The `AGENTS.md` routing instructions file is the only enforcement method (~60% compliance). The model receives the instructions at session start and sometimes follows them, but there is no programmatic interception — it can run raw `curl`, read large files, or bypass sandbox tools at any time.
+   ```toml
+   [mcp_servers.context-mode]
+   command = "context-mode"
+   ```
 
-For stronger enforcement, you can also add the instructions globally:
+3. Copy routing instructions (Codex CLI has no hook support):
 
-```bash
-cp ~/.codex/AGENTS.md  # auto-created, or copy from node_modules/context-mode/configs/codex/AGENTS.md
-```
+   ```bash
+   cp node_modules/context-mode/configs/codex/AGENTS.md ./AGENTS.md
+   ```
 
-Global `~/.codex/AGENTS.md` applies to all projects. Project-level `./AGENTS.md` applies to the current project only. If both exist, Codex CLI merges them.
+   For global use: `cp node_modules/context-mode/configs/codex/AGENTS.md ~/.codex/AGENTS.md`. Global applies to all projects. If both exist, Codex CLI merges them.
 
-</details>
+4. Restart Codex CLI.
 
-<details>
-<summary><strong>Antigravity</strong></summary>
+**Verify:** Start a session and type `ctx stats`. Context-mode tools should appear and respond.
 
-**Step 1 — Install globally:**
-
-```bash
-npm install -g context-mode
-```
-
-**Step 2 — Register the MCP server.** Add to `~/.gemini/antigravity/mcp_config.json`:
-
-```json
-{
-  "mcpServers": {
-    "context-mode": {
-      "command": "context-mode"
-    }
-  }
-}
-```
-
-**Step 3 — Restart Antigravity.** On first MCP server startup, a `GEMINI.md` routing instructions file is auto-created in your project root. Antigravity reads `GEMINI.md` automatically and learns to prefer context-mode sandbox tools.
-
-**About hooks:** Antigravity does not support hooks — there is no public hook API. The `GEMINI.md` routing instructions file is the only enforcement method (~60% compliance). The model receives the instructions at session start and sometimes follows them, but there is no programmatic interception — it can run raw `run_command`, read large files via `view_file`, or bypass sandbox tools at any time.
-
-**Auto-detection:** context-mode detects Antigravity automatically via the MCP protocol handshake (`clientInfo.name`). No environment variables or manual platform configuration needed.
-
-Example MCP config: [`configs/antigravity/mcp_config.json`](configs/antigravity/mcp_config.json)
-Routing rules: [`configs/antigravity/GEMINI.md`](configs/antigravity/GEMINI.md)
+**Routing:** Manual. The `AGENTS.md` file is the only enforcement method (~60% compliance). There is no programmatic interception — the model can run raw `curl`, read large files, or bypass sandbox tools at any time. Hook support PRs [#2904](https://github.com/openai/codex/pull/2904) and [#9796](https://github.com/openai/codex/pull/9796) were closed without merge.
 
 </details>
 
 <details>
-<summary><strong>Kiro</strong></summary>
+<summary><strong>Antigravity</strong> — MCP-only, no hooks</summary>
 
-**Step 1 — Install globally:**
+**Prerequisites:** Node.js 18+, Antigravity installed.
 
-```bash
-npm install -g context-mode
-```
+**Install:**
 
-**Step 2 — Register the MCP server.** Add to `.kiro/settings/mcp.json` in your project root (or `~/.kiro/settings/mcp.json` for global):
+1. Install context-mode globally:
 
-```json
-{
-  "mcpServers": {
-    "context-mode": {
-      "command": "context-mode"
-    }
-  }
-}
-```
+   ```bash
+   npm install -g context-mode
+   ```
 
-**Step 3 — Add hooks.** Without hooks, the model can bypass routing and dump raw output into your context. Hooks intercept every tool call and enforce sandbox routing programmatically. Create `.kiro/hooks/context-mode.json` (or copy from [`configs/kiro/agent.json`](configs/kiro/agent.json)):
+2. Add to `~/.gemini/antigravity/mcp_config.json`:
 
-```json
-{
-  "name": "context-mode",
-  "description": "Context-mode hooks for context window protection",
-  "hooks": {
-    "preToolUse": [
-      { "matcher": "*", "command": "context-mode hook kiro pretooluse" }
-    ],
-    "postToolUse": [
-      { "matcher": "*", "command": "context-mode hook kiro posttooluse" }
-    ]
-  }
-}
-```
+   ```json
+   {
+     "mcpServers": {
+       "context-mode": {
+         "command": "context-mode"
+       }
+     }
+   }
+   ```
 
-**Step 4 — Restart Kiro.** On first session start, the pretooluse hook automatically manages `KIRO.md` routing instructions in your project root:
+3. Copy routing instructions (Antigravity has no hook support):
 
-- **File does not exist** — the routing instructions file is written.
-- **File exists without context-mode rules** — routing instructions are appended after your existing content.
-- **File already contains context-mode rules** — skipped (idempotent, no duplicate content).
+   ```bash
+   cp node_modules/context-mode/configs/antigravity/GEMINI.md ./GEMINI.md
+   ```
 
-**Auto-detection:** context-mode detects Kiro automatically via the MCP protocol handshake (`clientInfo.name`). No environment variables or manual platform configuration needed.
+4. Restart Antigravity.
+
+**Verify:** In an Antigravity session, type `ctx stats`. Context-mode tools should appear and respond.
+
+**Routing:** Manual. The `GEMINI.md` file is the only enforcement method (~60% compliance). There is no programmatic interception. Auto-detected via MCP protocol handshake (`clientInfo.name`) — no manual platform configuration needed.
+
+Full configs: [`configs/antigravity/mcp_config.json`](configs/antigravity/mcp_config.json) | [`configs/antigravity/GEMINI.md`](configs/antigravity/GEMINI.md)
 
 </details>
 
 <details>
-<summary><strong>Zed</strong></summary>
+<summary><strong>Kiro</strong> — hooks with steering file</summary>
 
-**Step 1 — Install globally:**
+**Prerequisites:** Node.js 18+, Kiro with MCP enabled (Settings > search "MCP").
 
-```bash
-npm install -g context-mode
-```
+**Install:**
 
-**Step 2 — Add to Zed settings** (`~/.config/zed/settings.json`):
+1. Install context-mode globally:
 
-```json
-{
-  "context_servers": {
-    "context-mode": {
-      "command": {
-        "path": "context-mode"
-      }
-    }
-  }
-}
-```
+   ```bash
+   npm install -g context-mode
+   ```
 
-**Step 3 — Restart Zed.** On first MCP server startup, an `AGENTS.md` routing instructions file is auto-created in your project root. Zed reads the MCP tools and the model learns to prefer context-mode sandbox tools.
+2. Add to `.kiro/settings/mcp.json` in your project (or `~/.kiro/settings/mcp.json` for global):
 
-**About hooks:** Zed does not support hooks — there is no public hook or extension API for tool-use lifecycle events. The `AGENTS.md` routing instructions file is the only enforcement method (~60% compliance). The model receives the instructions at session start and sometimes follows them, but there is no programmatic interception.
+   ```json
+   {
+     "mcpServers": {
+       "context-mode": {
+         "command": "context-mode"
+       }
+     }
+   }
+   ```
 
-**Auto-detection:** context-mode detects Zed automatically via the MCP protocol handshake (`clientInfo.name`). No environment variables or manual platform configuration needed.
+3. Create `.kiro/hooks/context-mode.json`:
+
+   ```json
+   {
+     "name": "context-mode",
+     "description": "Context-mode hooks for context window protection",
+     "hooks": {
+       "preToolUse": [
+         { "matcher": "*", "command": "context-mode hook kiro pretooluse" }
+       ],
+       "postToolUse": [
+         { "matcher": "*", "command": "context-mode hook kiro posttooluse" }
+       ]
+     }
+   }
+   ```
+
+4. Copy routing instructions. Kiro's `agentSpawn` (SessionStart) is not yet implemented, so the model needs a routing file at session start:
+
+   ```bash
+   cp node_modules/context-mode/configs/kiro/KIRO.md ./KIRO.md
+   ```
+
+5. Restart Kiro.
+
+**Verify:** Open the Kiro panel > MCP Servers tab and confirm "context-mode" shows a green status indicator. In chat, type `ctx stats`.
+
+**Routing:** Hooks enforce routing programmatically via `preToolUse`/`postToolUse`. The `KIRO.md` file provides routing instructions since `agentSpawn` (SessionStart equivalent) is not yet wired. Tool names appear as `@context-mode/ctx_batch_execute`, `@context-mode/ctx_search`, etc. Auto-detected via MCP protocol handshake.
+
+Full configs: [`configs/kiro/mcp.json`](configs/kiro/mcp.json) | [`configs/kiro/agent.json`](configs/kiro/agent.json) | [`configs/kiro/KIRO.md`](configs/kiro/KIRO.md)
 
 </details>
 
 <details>
-<summary><strong>Pi Coding Agent</strong></summary>
+<summary><strong>Zed</strong> — MCP-only, no hooks</summary>
 
-**Step 1 — Install the extension:**
+**Prerequisites:** Node.js 18+, Zed installed.
 
-```bash
-git clone https://github.com/mksglu/context-mode.git ~/.pi/extensions/context-mode
-cd ~/.pi/extensions/context-mode
-npm install
-```
+**Install:**
 
-**Step 2 — Add MCP server** to `~/.pi/settings/mcp.json` or `.pi/settings/mcp.json`:
+1. Install context-mode globally:
 
-```json
-{
-  "mcpServers": {
-    "context-mode": {
-      "command": "node",
-      "args": ["~/.pi/extensions/context-mode/node_modules/context-mode/start.mjs"]
-    }
-  }
-}
-```
+   ```bash
+   npm install -g context-mode
+   ```
 
-**Step 3 — Restart Pi.**
+2. Add to `~/.config/zed/settings.json` (Windows: `%APPDATA%\Zed\settings.json`):
 
-The extension handles session continuity (event capture, resume snapshots, compaction recovery). The MCP server provides sandbox tools (batch_execute, execute, search, etc.).
+   ```json
+   {
+     "context_servers": {
+       "context-mode": {
+         "command": {
+           "path": "context-mode"
+         }
+       }
+     }
+   }
+   ```
+
+   Note: Zed uses `"context_servers"` and `"command": { "path": "..." }` syntax, not `"mcpServers"` or `"command": "..."` like other platforms.
+
+3. Copy routing instructions (Zed has no hook support):
+
+   ```bash
+   cp node_modules/context-mode/configs/zed/AGENTS.md ./AGENTS.md
+   ```
+
+4. Restart Zed (or save `settings.json` — Zed auto-restarts context servers on config change).
+
+**Verify:** Open the Agent Panel (`Cmd+Shift+A`), go to settings, and check the indicator dot next to "context-mode" — green means active. Type `ctx stats` in the agent chat.
+
+**Routing:** Manual. The `AGENTS.md` file is the only enforcement method (~60% compliance). There is no programmatic interception. Tool names appear as `mcp:context-mode:ctx_batch_execute`, `mcp:context-mode:ctx_search`, etc. Auto-detected via MCP protocol handshake.
+
+</details>
+
+<details>
+<summary><strong>Pi Coding Agent</strong> — extension with full hook support</summary>
+
+**Prerequisites:** Node.js 18+, Pi Coding Agent installed.
+
+**Install:**
+
+1. Clone the extension:
+
+   ```bash
+   git clone https://github.com/mksglu/context-mode.git ~/.pi/extensions/context-mode
+   cd ~/.pi/extensions/context-mode
+   npm install
+   ```
+
+2. Add to `~/.pi/settings/mcp.json` (or `.pi/settings/mcp.json` for project-level):
+
+   ```json
+   {
+     "mcpServers": {
+       "context-mode": {
+         "command": "node",
+         "args": ["~/.pi/extensions/context-mode/node_modules/context-mode/start.mjs"]
+       }
+     }
+   }
+   ```
+
+3. Restart Pi.
+
+**Verify:** In a Pi session, type `ctx stats`. Context-mode tools should appear and respond.
+
+**Routing:** Automatic. The extension registers all key lifecycle events (`tool_call`, `tool_result`, `session_start`, `session_before_compact`), providing full session continuity and routing enforcement.
 
 </details>
 
@@ -680,19 +754,19 @@ Detailed event data is also indexed into FTS5 for on-demand retrieval via `searc
 
 **Cursor** — Partial coverage. Native `preToolUse` and `postToolUse` hooks capture tool events. `sessionStart` is documented by Cursor but currently rejected by their validator, so session restore is not available. Routing instructions are delivered via MCP server startup instead.
 
-**OpenCode** — Partial. The TypeScript plugin captures PostToolUse events via `tool.execute.after`, but SessionStart is not yet available ([#14808](https://github.com/sst/opencode/issues/14808)). Events are stored but not automatically restored after compaction. The `AGENTS.md` routing instructions file compensates by re-teaching tool preferences at each session start.
+**OpenCode** — Partial. The TypeScript plugin captures PostToolUse events via `tool.execute.after`, but SessionStart is not yet available ([#14808](https://github.com/sst/opencode/issues/14808)). Events are stored but not automatically restored after compaction.
 
 **OpenClaw / Pi Agent** — High coverage. All tool lifecycle hooks (`after_tool_call`, `before_compaction`, `session_start`) fire via the native gateway plugin. User decisions aren't captured but file edits, git ops, errors, and tasks are fully tracked. Falls back to DB snapshot reconstruction if compaction hooks fail on older gateway versions. See [`docs/adapters/openclaw.md`](docs/adapters/openclaw.md).
 
-**Codex CLI** — No session support. No hooks means no event capture. Each compaction or new session starts fresh. The `AGENTS.md` routing instructions file is the only continuity mechanism.
+**Codex CLI** — No session support. No hooks means no event capture. Each compaction or new session starts fresh. Requires manually copying `AGENTS.md` to your project root.
 
-**Antigravity** — No session support. Same as Codex CLI — no hooks, no event capture. The `GEMINI.md` routing instructions file is auto-written on first MCP server startup. Auto-detected via MCP protocol handshake (`clientInfo.name`).
+**Antigravity** — No session support. Same as Codex CLI — no hooks, no event capture. Requires manually copying `GEMINI.md` to your project root. Auto-detected via MCP protocol handshake (`clientInfo.name`).
 
-**Zed** — No session support. Same as Codex CLI — no hooks, no event capture. The `AGENTS.md` routing instructions file is auto-written on first MCP server startup. Auto-detected via MCP protocol handshake (`clientInfo.name`).
+**Zed** — No session support. Same as Codex CLI — no hooks, no event capture. Requires manually copying `AGENTS.md` to your project root. Auto-detected via MCP protocol handshake (`clientInfo.name`).
 
-**Kiro** — Partial coverage. Native `preToolUse` and `postToolUse` hooks capture tool events and enforce sandbox routing. `agentSpawn` (the Kiro equivalent of SessionStart) is not yet implemented, so session restore after compaction is not available. The `KIRO.md` routing instructions file is auto-written on first session start. Auto-detected via MCP protocol handshake (`clientInfo.name`).
+**Kiro** — Partial coverage. Native `preToolUse` and `postToolUse` hooks capture tool events and enforce sandbox routing. `agentSpawn` (the Kiro equivalent of SessionStart) is not yet implemented, so session restore after compaction is not available. Requires manually copying `KIRO.md` to your project root. Auto-detected via MCP protocol handshake (`clientInfo.name`).
 
-**Pi Coding Agent** — High coverage. The extension registers all key lifecycle events: `tool_call` (PreToolUse), `tool_result` (PostToolUse), `session_start` (SessionStart), and `session_before_compact` (PreCompact). File edits, git ops, errors, and tasks are fully tracked. Session restore after compaction works via the extension's event hooks. The `AGENTS.md` routing instructions file is auto-written on first session start.
+**Pi Coding Agent** — High coverage. The extension registers all key lifecycle events: `tool_call` (PreToolUse), `tool_result` (PostToolUse), `session_start` (SessionStart), and `session_before_compact` (PreCompact). File edits, git ops, errors, and tasks are fully tracked. Session restore after compaction works via the extension's event hooks.
 
 </details>
 
@@ -715,11 +789,9 @@ Detailed event data is also indexed into FTS5 for on-demand retrieval via `searc
 >
 > **OpenClaw** runs context-mode as a native gateway plugin targeting Pi Agent sessions. Hooks register via `api.on()` (tool/lifecycle) and `api.registerHook()` (commands). All tool interception and compaction hooks are supported. See [`docs/adapters/openclaw.md`](docs/adapters/openclaw.md).
 >
-> **Codex CLI**, **Antigravity**, and **Zed** do not support hooks. They rely solely on routing instruction files (`AGENTS.md` / `GEMINI.md`) for enforcement (~60% compliance). Antigravity and Zed are auto-detected via MCP protocol handshake — no manual platform configuration needed.
+> **Codex CLI**, **Antigravity**, and **Zed** do not support hooks. They rely solely on manually-copied routing instruction files (`AGENTS.md` / `GEMINI.md`) for enforcement (~60% compliance). See each platform's install section for copy instructions. Antigravity and Zed are auto-detected via MCP protocol handshake — no manual platform configuration needed.
 >
-> **Kiro** supports native `preToolUse` and `postToolUse` hooks for routing enforcement and tool event capture. `agentSpawn` (SessionStart equivalent) and `stop` are not yet wired. Kiro is auto-detected via MCP protocol handshake (`clientInfo.name`).
->
-> **Zed** does not support hooks. It relies solely on the `AGENTS.md` routing instructions file for enforcement (~60% compliance). Zed is auto-detected via MCP protocol handshake — no manual platform configuration needed.
+> **Kiro** supports native `preToolUse` and `postToolUse` hooks for routing enforcement and tool event capture. `agentSpawn` (SessionStart equivalent) and `stop` are not yet wired. Requires manually copying `KIRO.md` to your project root. Kiro is auto-detected via MCP protocol handshake (`clientInfo.name`).
 >
 > **Pi Coding Agent** runs context-mode as an extension with full hook support. The extension registers `tool_call`, `tool_result`, `session_start`, and `session_before_compact` events, providing high session continuity coverage. The MCP server provides the 6 sandbox tools.
 
@@ -727,12 +799,14 @@ Detailed event data is also indexed into FTS5 for on-demand retrieval via `searc
 
 Hooks intercept tool calls programmatically — they can block dangerous commands and redirect them to the sandbox before execution. Instruction files guide the model via prompt instructions but cannot block anything. **Always enable hooks where supported.**
 
+> **Note:** Routing instruction files were previously auto-written to project directories on first session start. This was disabled to prevent git tree pollution ([#158](https://github.com/mksglu/context-mode/issues/158), [#164](https://github.com/mksglu/context-mode/issues/164)). Hook-capable platforms (Claude Code, Gemini CLI, VS Code Copilot, OpenCode, OpenClaw) inject routing via hooks and need no file. Non-hook platforms (Codex, Zed, Cursor, Kiro, Antigravity) require a one-time manual copy — see each platform's install section.
+
 | Platform | Hooks | Instruction File | With Hooks | Without Hooks |
 |---|:---:|---|:---:|:---:|
 | Claude Code | Yes (auto) | [`CLAUDE.md`](configs/claude-code/CLAUDE.md) | **~98% saved** | ~60% saved |
 | Gemini CLI | Yes | [`GEMINI.md`](configs/gemini-cli/GEMINI.md) | **~98% saved** | ~60% saved |
 | VS Code Copilot | Yes | [`copilot-instructions.md`](configs/vscode-copilot/copilot-instructions.md) | **~98% saved** | ~60% saved |
-| Cursor | Yes | -- | **~98% saved** | Manual tool choice |
+| Cursor | Yes | [`context-mode.mdc`](configs/cursor/context-mode.mdc) | **~98% saved** | ~60% saved |
 | OpenCode | Plugin | [`AGENTS.md`](configs/opencode/AGENTS.md) | **~98% saved** | ~60% saved |
 | OpenClaw | Plugin | [`AGENTS.md`](configs/openclaw/AGENTS.md) | **~98% saved** | ~60% saved |
 | Codex CLI | -- | [`AGENTS.md`](configs/codex/AGENTS.md) | -- | ~60% saved |

@@ -150,9 +150,9 @@ describe("KiroAdapter", () => {
   // ── Config paths ──────────────────────────────────────
 
   describe("config paths", () => {
-    it("settings path is ~/.kiro/settings/mcp_config.json", () => {
+    it("settings path is ~/.kiro/settings/mcp.json", () => {
       expect(adapter.getSettingsPath()).toBe(
-        resolve(homedir(), ".kiro", "settings", "mcp_config.json"),
+        resolve(homedir(), ".kiro", "settings", "mcp.json"),
       );
     });
 
