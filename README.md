@@ -311,7 +311,7 @@ Full config: [`configs/opencode/opencode.json`](configs/opencode/opencode.json)
 
    ```json
    {
-     "$schema": "https://kilo.ai/config.json",
+     "$schema": "https://app.kilo.ai/config.json",
      "mcp": {
        "context-mode": {
          "type": "local",

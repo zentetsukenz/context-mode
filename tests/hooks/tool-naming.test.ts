@@ -135,7 +135,7 @@ describe("KNOWN_PLATFORMS", () => {
     expect(KNOWN_PLATFORMS).toContain("gemini-cli");
     expect(KNOWN_PLATFORMS).toContain("antigravity");
     expect(KNOWN_PLATFORMS).toContain("opencode");
-    expect(KNOWN_PLATFORMS).toContain("kilocode");
+    expect(KNOWN_PLATFORMS).toContain("kilo");
     expect(KNOWN_PLATFORMS).toContain("vscode-copilot");
     expect(KNOWN_PLATFORMS).toContain("kiro");
     expect(KNOWN_PLATFORMS).toContain("zed");
