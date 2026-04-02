@@ -15,10 +15,8 @@
  *   - Session cleanup happens at plugin init (no SessionStart)
  */
 
-import { createHash, randomUUID } from "node:crypto";
-import { mkdirSync } from "node:fs";
-import { homedir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { randomUUID } from "node:crypto";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { SessionDB } from "./session/db.js";
@@ -78,24 +76,14 @@ function getPlatform(): AdapterPlatformType {
   return process.env.KILO ? "kilo" : "opencode";
 }
 
+const adapter = new OpenCodeAdapter(getPlatform());
+
 function getSessionDir(): string {
-  let configDir: string;
-  if (process.platform === "win32") {
-    configDir = process.env.APPDATA || join(homedir(), "AppData", "Roaming");
-  } else {
-    configDir = process.env.XDG_CONFIG_HOME || join(homedir(), ".config");
-  }
-  const dir = join(configDir, getPlatform(), "context-mode", "sessions");
-  mkdirSync(dir, { recursive: true });
-  return dir;
+  return adapter.getSessionDir();
 }
 
 function getDBPath(projectDir: string): string {
-  const hash = createHash("sha256")
-    .update(projectDir)
-    .digest("hex")
-    .slice(0, 16);
-  return join(getSessionDir(), `${hash}.db`);
+  return adapter.getSessionDBPath(projectDir);
 }
 
 // ── Plugin Factory ────────────────────────────────────────

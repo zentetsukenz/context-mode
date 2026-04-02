@@ -32,7 +32,6 @@ import {
   copyFileSync,
   accessSync,
   constants,
-  realpathSync,
 } from "node:fs";
 import { resolve, join } from "node:path";
 import { homedir } from "node:os";
@@ -322,6 +321,7 @@ export class OpenCodeAdapter implements HookAdapter {
   readSettings(): Record<string, unknown> | null {
     this.settingsPath = undefined;
     const configPaths = this.paths();
+    const globalPaths = new Set(configPaths.filter(p => p.includes(homedir())));
     let firstValidSettings: Record<string, unknown> | null = null;
     let firstValidPath: string | undefined;
 
@@ -336,11 +336,9 @@ export class OpenCodeAdapter implements HookAdapter {
           firstValidPath = configPath;
         }
 
-        const plugins = settings.plugin as string[] | undefined;
-        const hasPlugin = plugins?.some((p) => p.includes("context-mode"));
-        const isGlobalConfig = configPath === configPaths.at(-1) || configPath === configPaths.at(-2);
-        
-        if (hasPlugin || isGlobalConfig) {
+        const isGlobalConfig = globalPaths.has(configPath);
+
+        if (this.hasContextModePlugin(settings) || isGlobalConfig) {
           this.settingsPath = configPath;
           return settings;
         }
@@ -382,9 +380,8 @@ export class OpenCodeAdapter implements HookAdapter {
     }
 
     // Check for "context-mode" in plugin array
-    const plugins = settings.plugin as string[] | undefined;
-    if (plugins && Array.isArray(plugins)) {
-      const hasPlugin = plugins.some((p) => p.includes("context-mode"));
+    const hasPlugin = this.hasContextModePlugin(settings);
+    if (Array.isArray(settings.plugin)) {
       results.push({
         check: "Plugin registration",
         status: hasPlugin ? "pass" : "fail",
@@ -425,16 +422,12 @@ export class OpenCodeAdapter implements HookAdapter {
       };
     }
 
-    const plugins = settings.plugin as string[] | undefined;
-    if (plugins && Array.isArray(plugins)) {
-      const hasPlugin = plugins.some((p) => p.includes("context-mode"));
-      if (hasPlugin) {
-        return {
-          check: "Plugin registration",
-          status: "pass",
-          message: "context-mode found in plugin array",
-        };
-      }
+    if (this.hasContextModePlugin(settings)) {
+      return {
+        check: "Plugin registration",
+        status: "pass",
+        message: "context-mode found in plugin array",
+      };
     }
 
     return {
@@ -513,6 +506,14 @@ export class OpenCodeAdapter implements HookAdapter {
   }
 
   // ── Internal helpers ───────────────────────────────────
+
+  /**
+   * Check whether a settings object has the context-mode plugin registered.
+   */
+  private hasContextModePlugin(settings: Record<string, unknown>): boolean {
+    const plugins = settings.plugin;
+    return Array.isArray(plugins) && plugins.some((p: unknown) => typeof p === "string" && p.includes("context-mode"));
+  }
 
   /**
    * Extract session ID from OpenCode hook input.
