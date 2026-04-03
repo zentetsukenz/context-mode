@@ -26,7 +26,7 @@ This runs `scripts/install-openclaw-plugin.sh`, which handles building, extensio
 ### Prerequisites
 
 - **Node.js** must be in PATH (required for the build and registration steps)
-- **OpenClaw must have been started once** — the script needs `runtime/openclaw.runtime.json`, which OpenClaw creates on first launch
+- **OpenClaw must have been started once** — the script needs `openclaw.json`, which OpenClaw creates on first launch
 - **`OPENCLAW_STATE_DIR`** must point to your OpenClaw state directory (default: `/openclaw`). Pass it as an argument: `npm run install:openclaw -- /path/to/state`
 
 ### Manual install
@@ -41,7 +41,7 @@ See [`scripts/install-openclaw-plugin.sh`](../../scripts/install-openclaw-plugin
 
 ### Troubleshooting
 
-**"runtime/openclaw.runtime.json not found"**
+**"openclaw.json not found"**
 OpenClaw creates this file on first launch. Start OpenClaw once (`openclaw gateway start`), then re-run the install script. This is the most common issue for users who install context-mode before ever starting OpenClaw.
 
 **"OPENCLAW_STATE_DIR (/path) does not exist. Is OpenClaw installed?"**
